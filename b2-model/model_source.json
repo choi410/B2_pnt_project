@@ -1,0 +1,74 @@
+{
+  "base_model": "Qwen/Qwen3-4B-Instruct-2507",
+  "quantized_distribution": "unsloth/Qwen3-4B-Instruct-2507-bnb-4bit",
+  "revision": "f12db89cd5156e090618dded9b4367f23f8f3b33",
+  "files": [
+    {
+      "rfilename": "README.md",
+      "blobId": "1c2792edfad47211ef5657969c09e7a3ec270cc3",
+      "size": 9044
+    },
+    {
+      "rfilename": "added_tokens.json",
+      "blobId": "b54f9135e44c1e81047e8d05cb027af8bc039eed",
+      "size": 707
+    },
+    {
+      "rfilename": "chat_template.jinja",
+      "blobId": "a18870ad4ba26ac6c43758fc506c1bb6ff206bb4",
+      "size": 4040
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "b2ba571a6233ad8a8b71c5c448da800d29cf1c7a",
+      "size": 2185
+    },
+    {
+      "rfilename": "generation_config.json",
+      "blobId": "9727fbfef3c51823a86f9fe0354998fa7bb939ad",
+      "size": 237
+    },
+    {
+      "rfilename": "merges.txt",
+      "blobId": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+      "size": 1671853
+    },
+    {
+      "rfilename": "model.safetensors",
+      "blobId": "c758c7ee2d23a56862871e353f15f85dcf761798",
+      "size": 2653133894,
+      "lfs": {
+        "sha256": "f632ab95da1d8f307237094aca7c7dfa9e416b6d2f87bdd8ecda6dadfedb204d",
+        "size": 2653133894,
+        "pointerSize": 135
+      }
+    },
+    {
+      "rfilename": "special_tokens_map.json",
+      "blobId": "9b8043f10c758210957b050c77f14d6282f33a52",
+      "size": 614
+    },
+    {
+      "rfilename": "tokenizer.json",
+      "blobId": "cd71f61a15a522601badb3dc960d800d9cb3766c",
+      "size": 11422654,
+      "lfs": {
+        "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+        "size": 11422654,
+        "pointerSize": 133
+      }
+    },
+    {
+      "rfilename": "tokenizer_config.json",
+      "blobId": "9b37e07cb3cb20de2ce15a0c8e76b281f1f6bdc4",
+      "size": 9653
+    },
+    {
+      "rfilename": "vocab.json",
+      "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "size": 2776833
+    }
+  ],
+  "license": "Apache-2.0",
+  "quantization": "NF4, double quantization, bf16 compute"
+}

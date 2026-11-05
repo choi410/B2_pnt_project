@@ -1,0 +1,15 @@
+services:
+  b2:
+    image: b2-workspace:gpu
+    build:
+      target: ai
+    environment:
+      B2_MANUAL_ONLY: "0"
+    gpus: all
+    volumes:
+      - type: bind
+        source: ./b2-model/models
+        target: /app/b2-model/models
+        read_only: true
+        bind:
+          create_host_path: false

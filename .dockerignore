@@ -1,0 +1,15 @@
+**/.git
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+**/dist
+**/*.log
+**/*.sqlite3*
+**/.env*
+b2-model/models
+b2-model/results
+b2-service/data
+docker-data
+work
+outputs

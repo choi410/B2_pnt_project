@@ -1,0 +1,24 @@
+.venv/
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/*.py[cod]
+**/*.log
+**/*.sqlite3*
+**/*.db
+**/.env
+**/.env.*
+!.env.example
+b2-service/data/
+docker-data/
+b2-model/models/
+b2-model/results/
+work/
+outputs/
+*.zip
+*.tar
+*.tar.gz
+Thumbs.db
+.DS_Store
+
+# Built frontend is part of the portable v1 package and is intentionally tracked.

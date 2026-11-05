@@ -1,0 +1,4 @@
+services:
+  b2:
+    environment:
+      B2_PUBLIC_ORIGIN: "${B2_PUBLIC_ORIGIN:?Start with internet_share.py to register the generated HTTPS URL}"

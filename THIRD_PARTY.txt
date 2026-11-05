@@ -1,0 +1,11 @@
+Model: Qwen/Qwen3-4B-Instruct-2507
+Quantized distribution: unsloth/Qwen3-4B-Instruct-2507-bnb-4bit
+Revision: f12db89cd5156e090618dded9b4367f23f8f3b33
+License identifier supplied by the model publisher: Apache-2.0
+Model weights, tokenizer files and model configuration are not included in this package.
+Source metadata is retained under b2-model. The model source is provided for optional future connection.
+The included runtime.py is the local project's inference wrapper.
+
+Built frontend includes React, React DOM, and lucide-react. Their supplied license texts are retained in licenses.
+Python/PyTorch/Transformers and other Python libraries are installed separately from their official package sources and retain their own licenses.
+No new license is asserted here for the team's application code or documents.

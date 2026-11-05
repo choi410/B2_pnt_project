@@ -1,0 +1,4 @@
+﻿-r requirements-web.txt
+httpx==0.28.1
+pytest==9.2.0
+lm-format-enforcer==0.11.3

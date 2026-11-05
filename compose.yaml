@@ -1,0 +1,28 @@
+name: b2-workspace
+services:
+  b2:
+    image: b2-workspace:web
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:${B2_DOCKER_PORT:-8767}:8766"
+    environment:
+      B2_DATABASE: /app/b2-service/data/meetings.sqlite3
+      B2_MANUAL_ONLY: "1"
+    volumes:
+      - type: bind
+        source: ./docker-data
+        target: /app/b2-service/data
+        bind:
+          create_host_path: false
+    init: true
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/api/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 6s
+      start_period: 30s
+      retries: 6
