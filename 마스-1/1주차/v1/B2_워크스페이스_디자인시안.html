@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B2 워크스페이스 디자인 시안</title>
+<style>
+:root{
+  --bg:#F3F4F5; --card:#FFFFFF; --ink:#1A1C20; --sub:#6B7280; --faint:#9CA3AF; --line:#ECEDEF;
+  --brand:#FF6600; --brand-ink:#D94F00; --brand-soft:#FFF1E8;
+  --red:#D92D20; --red-soft:#FEECEB; --blue:#2563EB; --blue-soft:#EAF1FF;
+  --green:#12805C; --green-soft:#E6F6F0; --amber:#B25E00; --amber-soft:#FFF4DF;
+  --violet:#7C3AED; --pink:#DB2777;
+  --r:16px; --shadow:0 1px 1px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Pretendard Variable",Pretendard,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+h1,h2,h3,p{margin:0}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.wrap{max-width:972px;margin:0 auto;padding:0 16px}
+
+/* 상단 */
+.top{display:grid;grid-template-columns:auto minmax(0,1fr) 316px;gap:16px;align-items:center;padding:24px 0 16px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:800;font-size:20px;letter-spacing:-.02em;white-space:nowrap}
+.logo i{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:var(--brand);color:#fff;font-style:normal;font-size:14px;font-weight:800}
+.search{display:flex;align-items:center;gap:8px;height:48px;padding:0 8px 0 24px;background:var(--card);border-radius:999px;box-shadow:var(--shadow)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:none;font-size:16px}
+.search input::placeholder{color:var(--faint)}
+.search button{display:grid;place-items:center;width:36px;height:36px;border-radius:50%}
+.search button:hover{background:var(--bg)}
+.top-side{display:flex;gap:8px;align-items:center}
+.role{flex:1;min-width:0;height:48px;padding:0 12px 0 16px;border:0;border-radius:999px;background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:40px;padding:0 16px;border-radius:10px;font-size:14px;font-weight:700;white-space:nowrap}
+.btn.primary{background:var(--brand);color:#fff}
+.btn.primary:hover{background:#EE5F00}
+.btn.soft{background:var(--bg);color:var(--ink)}
+.btn.soft:hover{background:#E8E9EB}
+.top-side .btn{height:48px;border-radius:999px}
+
+/* 메뉴 칩 */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:0 0 16px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:36px;padding:0 14px;border-radius:999px;background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{background:#FAFAFB}
+.chip[aria-current=page],.chip.on{background:var(--ink);color:#fff}
+.chip small{font-size:12px;font-weight:600;color:var(--sub)}
+.chip.on small,.chip[aria-current=page] small{color:#D1D5DB}
+
+/* 레이아웃 */
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:24px;align-items:start}
+.stack{display:grid;gap:24px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tile{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:94px;padding:12px 16px;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);transition:transform .12s}
+.tile:hover{transform:translateY(-1px)}
+.tile b{font-size:14px;font-weight:700}
+.tile em{position:absolute;top:12px;right:14px;font-style:normal;font-size:12px;font-weight:700;color:var(--sub)}
+.tile em.alert{color:var(--red)}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden}
+.pad{padding:20px}
+.sec{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;min-height:32px}
+.sec h2{display:flex;align-items:center;gap:6px;font-size:20px;font-weight:700;letter-spacing:-.02em}
+.sec a{height:32px;padding:0 12px;border-radius:999px;background:var(--card);box-shadow:var(--shadow);font-size:13px;font-weight:700;display:inline-flex;align-items:center}
+.head{padding:8px 0 20px}
+.head h1{font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1.3}
+.head p{margin-top:4px;color:var(--sub);font-size:15px}
+.head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+
+/* 현황 */
+.hero{padding:20px;background:linear-gradient(135deg,#FF7A1A,#FF6600);color:#fff;border-radius:var(--r)}
+.hero small{font-size:13px;font-weight:600;opacity:.9}
+.hero h2{margin-top:2px;font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1.35}
+.hero a{display:inline-flex;align-items:center;height:34px;margin-top:12px;padding:0 14px;border-radius:999px;background:#fff;color:var(--brand-ink);font-size:13px;font-weight:700}
+.kpis{display:grid;grid-template-columns:1fr 1fr}
+.kpi{padding:16px 20px;border-bottom:1px solid var(--line)}
+.kpi:nth-child(odd){border-right:1px solid var(--line)}
+.kpi:nth-last-child(-n+2){border-bottom:0}
+.kpi span{display:block;font-size:13px;color:var(--sub)}
+.kpi b{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.kpi b.alert{color:var(--red)}
+.kpi b small{margin-left:1px;font-size:14px;font-weight:600}
+
+/* 목록 */
+.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row.plain{grid-template-columns:minmax(0,1fr) auto}
+.row:hover{background:#FCFCFD}
+.rank{font-size:18px;font-weight:600;text-align:center}
+.row h3{font-size:15px;font-weight:700;line-height:1.4;letter-spacing:-.01em}
+.meta{margin-top:2px;color:var(--sub);font-size:13px}
+.meta b{color:var(--ink);font-weight:600}
+.badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.badge{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;background:var(--bg);color:#4B5563;white-space:nowrap}
+.badge.red{background:var(--red-soft);color:var(--red)}
+.badge.green{background:var(--green-soft);color:var(--green)}
+.badge.blue{background:var(--blue-soft);color:var(--blue)}
+.badge.amber{background:var(--amber-soft);color:var(--amber)}
+.badge.orange{background:var(--brand-soft);color:var(--brand-ink)}
+.more{display:block;width:100%;height:52px;border-top:1px solid var(--line);font-size:14px;font-weight:700;text-align:center;line-height:52px}
+.more:hover{background:#FAFAFB}
+.mini{display:block;padding:12px 20px;border-bottom:1px solid var(--line)}
+.mini:last-child{border-bottom:0}
+.mini:hover{background:#FCFCFD}
+.mini h3{font-size:14px;font-weight:700;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bar{height:6px;margin-top:8px;border-radius:999px;background:var(--bg);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--brand);border-radius:999px}
+
+/* 카드 묶음 */
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pcard{display:block;padding:20px;background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);transition:transform .12s}
+.pcard:hover{transform:translateY(-1px)}
+.pcard .ic{margin-bottom:12px}
+.pcard h3{font-size:16px;font-weight:700;line-height:1.4;letter-spacing:-.01em}
+.pcard p{margin-top:4px;color:var(--sub);font-size:13px}
+.stat{display:flex;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--sub)}
+.stat b{color:var(--ink);font-weight:700}
+
+/* 요구사항 */
+.split{display:grid;grid-template-columns:316px minmax(0,1fr);gap:16px;align-items:start}
+.req{display:block;width:100%;padding:12px 20px;text-align:left;border-bottom:1px solid var(--line)}
+.req:last-child{border-bottom:0}
+.req:hover{background:#FCFCFD}
+.req[aria-pressed=true]{background:var(--brand-soft)}
+.req code{font:600 12px ui-monospace,Menlo,Consolas,monospace;color:var(--sub)}
+.req b{display:block;font-size:14px;font-weight:700}
+.vals{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.val{padding:12px 14px;border-radius:12px;background:var(--bg)}
+.val span{display:block;font-size:12px;color:var(--sub)}
+.val b{font-size:18px;font-weight:800}
+.tl{position:relative;margin:20px 0 0;padding:0;list-style:none}
+.tl li{position:relative;padding:0 0 20px 32px}
+.tl li:last-child{padding-bottom:0}
+.tl li::before{content:"";position:absolute;left:9px;top:22px;bottom:-2px;width:2px;background:var(--line)}
+.tl li:last-child::before{display:none}
+.tl .n{position:absolute;left:0;top:0;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:700}
+.tl li.ok .n{background:var(--brand)}
+.tl h3{font-size:14px;font-weight:700}
+.change{margin-top:2px;font-size:16px;font-weight:800}
+.change s{color:var(--faint);font-weight:600}
+
+/* 입력 */
+.steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.field{display:grid;gap:6px;margin-bottom:12px;font-size:13px;font-weight:700}
+.field input,.field textarea{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:15px;font-weight:400}
+.field textarea{min-height:190px;resize:vertical}
+.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.drop{display:grid;place-items:center;gap:4px;padding:24px;margin-bottom:16px;border:1.5px dashed #D1D5DB;border-radius:12px;background:#FAFAFB;text-align:center;font-size:14px;font-weight:700}
+.drop small{color:var(--sub);font-weight:400}
+.actions{display:flex;justify-content:flex-end;gap:8px}
+.empty{padding:48px 20px;text-align:center}
+.empty b{display:block;font-size:16px}
+.empty p{margin-top:4px;color:var(--sub);font-size:14px}
+.engine{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.steps-list{margin:0;padding:0;list-style:none;counter-reset:s}
+.steps-list li{counter-increment:s;display:grid;grid-template-columns:28px 1fr;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.steps-list li:last-child{border-bottom:0}
+.steps-list li::before{content:counter(s);font-size:18px;font-weight:600;text-align:center}
+.steps-list b{display:block;font-size:15px}
+.steps-list span{font-size:13px;color:var(--sub)}
+.foot{padding:32px 0;color:var(--faint);font-size:12px;text-align:center}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);padding:12px 18px;border-radius:999px;background:var(--ink);color:#fff;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;max-width:calc(100vw - 32px);text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:900px){
+  .top{grid-template-columns:auto 1fr;padding-top:16px}
+  .search{grid-column:1/-1;grid-row:2}
+  .top-side{justify-content:flex-end;min-width:0}
+  .grid,.split{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:560px){
+  .logo span{display:none}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cards,.fields,.engine{grid-template-columns:minmax(0,1fr)}
+  .row{padding:14px 16px;gap:8px}
+  .row>.btn,.row>div:last-child>.btn{display:none}
+  .head h1{font-size:24px}
+  .top-side .btn{padding:0 14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="logo" href="#/overview" aria-label="B2 워크스페이스 홈"><i>B2</i><span>워크스페이스</span></a>
+    <form class="search" id="searchForm" role="search">
+      <input id="q" type="search" placeholder="회의록, 요구사항, 담당자를 검색하세요" aria-label="통합 검색">
+      <button type="submit" aria-label="검색"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
+    </form>
+    <div class="top-side">
+      <select class="role" id="role" aria-label="체험 역할">
+        <option value="박서연">PM · 박서연</option>
+        <option value="이준호">담당자 · 이준호</option>
+        <option value="정유진">담당자 · 정유진</option>
+      </select>
+      <a class="btn primary" href="#/new">회의록 등록</a>
+    </div>
+  </header>
+  <nav class="chips" id="nav" aria-label="주요 메뉴"></nav>
+  <main id="app"></main>
+  <footer class="foot">B2 Project Workspace · 회의록에서 업무 등록 · 조치 기록 · PM 완료 확인까지 · 화면 구성 확인용 디자인 시안</footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const TODAY='2026-11-05';
+const KPI={open:14,pm:0,late:8,unset:1};
+const IC={
+  folder:['#FF8A3D','<path d="M3 7a2 2 0 0 1 2-2h4.2l2 2.4H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path fill="#fff" opacity=".85" d="M7 12h10v1.6H7z"/>'],
+  list:['#2563EB','<rect x="4" y="3" width="16" height="18" rx="4"/><path fill="#fff" d="M8 8h8v1.6H8zM8 12h8v1.6H8zM8 16h5v1.6H8z"/>'],
+  history:['#7C3AED','<circle cx="12" cy="12" r="9"/><path fill="#fff" d="M11.2 7h1.6v4.6l3.3 2-.8 1.4-4.1-2.5z"/>'],
+  person:['#12A67A','<circle cx="12" cy="8" r="4.5"/><path d="M3.8 21c.6-4.6 3.9-7 8.2-7s7.600 2.400 8.200 7z"/>'],
+  check:['#FF6600','<path d="M12 2.500 14.600 4.300 17.700 4.200 18.700 7.200 21.200 9 20.200 12 21.200 15 18.700 16.800 17.700 19.800 14.600 19.700 12 21.500 9.400 19.700 6.300 19.800 5.300 16.800 2.800 15 3.800 12 2.800 9 5.300 7.200 6.300 4.200 9.400 4.300z"/><path fill="none" stroke="#fff" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round" d="m8.500 12 2.500 2.500 4.500-5"/>'],
+  note:['#F59E0B','<path d="M6 3h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path fill="#fff" opacity=".9" d="M15 3v5h5zM8 12h8v1.600H8zM8 16h6v1.600H8z"/>'],
+  docs:['#DB2777','<rect x="7" y="2.500" width="13" height="16" rx="3" opacity=".55"/><rect x="4" y="5.500" width="13" height="16" rx="3"/><path fill="#fff" d="M7 11h7v1.600H7zM7 15h5v1.600H7z"/>'],
+  guide:['#0EA5E9','<circle cx="12" cy="12" r="9"/><path fill="#fff" d="M10 8l6 4-6 4z"/>'],
+  fire:['#EF4444','<path d="M12.500 2.500c.500 3-1 4.500-2.500 6-1 1-3.500 3-3.500 6.500a6 6 0 0 0 12 0c0-3.500-2-5.500-3-7-.500 1.500-1 2.300-2 2.800.500-3-.200-6-1-8.300z"/>']
+};
+function ic(n,s=28){const[c,p]=IC[n];return `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="${c}" aria-hidden="true">${p}</svg>`}
+
+const MENU=[
+ ['overview','전체 현황'],['projects','프로젝트'],['work','업무 목록'],['requirements','요구사항 이력'],
+ ['mine','내 업무'],['review','완료 검토'],['meetings','회의록'],['documents','핵심 문서 5종']];
+const TILES=[
+ ['projects','프로젝트','folder',()=>PROJECTS.length+'개'],
+ ['work','업무 목록','list',()=>KPI.open+'건'],
+ ['requirements','요구사항 이력','history',()=>REQS.length+'개'],
+ ['mine','내 업무','person',()=>mine().length+'건'],
+ ['review','완료 검토','check',()=>KPI.pm+'건'],
+ ['meetings','회의록','note',()=>MEETINGS.length+'건'],
+ ['documents','핵심 문서 5종','docs',()=>''],
+ ['guide','체험 방법','guide',()=>'']];
+
+const PROJECTS=[
+ {id:'P-2607',name:'P-2607 코팅 설비 제작 프로젝트',d:'회의록과 후속 업무를 함께 관리하는 프로젝트',pm:'박서연',mt:2,done:0,total:4},
+ {id:'PNT-SIM-001',name:'PNT-SIM-001 구미 전극 노칭기 프로젝트 01',d:'연속 회의 5회와 요구사항 변경 이력을 확인하는 가상 프로젝트',pm:'김정훈',mt:5,req:'12개 · 32건'},
+ {id:'P-2614',name:'P-2614 D사 전극 롤프레스 2호기 제작 프로젝트',d:'회의록과 후속 업무를 함께 관리하는 프로젝트',pm:'박서연',mt:4,done:0,total:6},
+ {id:'RP26-014',name:'D사 양극 롤프레스(1,400W) 신규 제작 [PJT No. RP26-014]',d:'회의록과 후속 업무를 함께 관리하는 프로젝트',pm:'박서연',mt:1,done:0,total:0},
+ {id:'SIM-RP26-021',name:'SIM-RP26-021 가상 D사 전극 롤프레스 제작',d:'회의록과 후속 업무를 함께 관리하는 프로젝트',pm:'박서연',mt:1,done:0,total:4},
+ {id:'P-2619',name:'P-2619 C사 전극 슬리터 제작 프로젝트',d:'회의록과 후속 업무를 함께 관리하는 프로젝트',pm:'박서연',mt:1,done:0,total:0}];
+
+const TASKS=[
+ ['이준호','고객 요구사항 목록 및 기본 배치도 초안 공유','P-2607','2026-01-09'],
+ ['정유진','설계 검토용 점검 항목 초안 공유','P-2607','2026-01-12'],
+ ['제어 김효준','갭 제어, 장력 제어 영향 검토','P-2614','2026-09-16'],
+ ['설계 이윤서','135m/min 기준 메인 드라이브 용량 검토','P-2614','2026-09-16'],
+ ['설계 우지현','안전 커버 주변 배관 간섭 확인','P-2614','2026-09-18'],
+ ['영업 전민지','A안/B안 비교 자료를 D사에 송부','P-2614','2026-09-23'],
+ ['이준호','슬라이딩 도어 간섭 검토 결과와 형상안 공유','SIM-RP26-021','2026-11-10'],
+ ['정유진','도어 개방 시 롤 정지·가압 해제 인터록 시험 항목 작성','SIM-RP26-021','2026-11-11'],
+ ['박예린','변경 견적의 고객 승인 여부 회신','SIM-RP26-021','']
+].map(([who,title,pid,due])=>({who,title,pid,due,state:'미착수'}));
+
+const MEETINGS=[
+ ['[가상] 롤프레스 속도 및 안전커버 사양 협의','SIM-RP26-021 가상 D사 전극 롤프레스 제작','2026-11-05 14:00~15:00','6건','검토 저장 완료'],
+ ['코팅 설비 안전커버 및 점검 보고 검토','P-2607 코팅 설비 제작 프로젝트','2026-11-04 14:00~14:40','4건','검토 저장 완료'],
+ ['D사 롤프레스 2호기 FAT 사전 협의','P-2614 D사 전극 롤프레스 2호기 제작 프로젝트','2026-10-29 13:30~14:30','3건','검토 대기'],
+ ['압연 속도 변경 및 FAT 일정 협의','P-2614 D사 전극 롤프레스 2호기 제작 프로젝트','2026-10-13 14:00~15:30','9건','검토 대기'],
+ ['압연 속도 상향 대응 내부 설계 검토','P-2614 D사 전극 롤프레스 2호기 제작 프로젝트','2026-09-22 10:00~11:00','5건','검토 저장 완료'],
+ ['C사 전극 슬리터 승인도 1차 협의','P-2619 C사 전극 슬리터 제작 프로젝트','2026-09-15 10:30~11:40','0건','직접 검토 필요'],
+ ['D사 롤프레스 2호기 사양 협의','P-2614 D사 전극 롤프레스 2호기 제작 프로젝트','2026-09-08 14:00~15:10','5건','검토 저장 완료'],
+ ['D사 정기 협의 #3 (라인 속도·납기 변경 협의)','D사 양극 롤프레스(1,400W) 신규 제작 [PJT No. RP26-014]','2026-07-23 10:00~12:00','0건','직접 검토 필요'],
+ ['코팅 설비 제작 프로젝트 킥오프 회의','P-2607 코팅 설비 제작 프로젝트','2026-01-05 14:00~14:40','4건','검토 저장 완료'],
+ ['최종사양 및 잔여조치 확정','PNT-SIM-001 구미 전극 노칭기 프로젝트 01','2026-12-11 16:00','7개 이력','제공된 가상자료'],
+ ['고객 설계변경 요청 검토','PNT-SIM-001 구미 전극 노칭기 프로젝트 01','2026-12-04 11:00','5개 이력','제공된 가상자료'],
+ ['기계 및 제어 설계 검토','PNT-SIM-001 구미 전극 노칭기 프로젝트 01','2026-11-27 15:00','9개 이력','제공된 가상자료'],
+ ['노칭 핵심사양 조정 회의','PNT-SIM-001 구미 전극 노칭기 프로젝트 01','2026-11-20 14:00','6개 이력','제공된 가상자료'],
+ ['프로젝트 킥오프 및 초기사양 협의','PNT-SIM-001 구미 전극 노칭기 프로젝트 01','2026-11-13 10:00','5개 이력','제공된 가상자료']
+].map(([t,p,w,c,s])=>({t,p,w,c,s}));
+
+const REQS=[
+ ['REQ-P001-001','생산속도','55 m/min','확정','5차 · 이력 5건'],['REQ-P001-002','탭 폭','30.0 mm · ±0.2','확정','3차 · 이력 3건'],
+ ['REQ-P001-003','버 높이','8 µm · 이하','확정','3차 · 이력 3건'],['REQ-P001-004','안전커버 재질 및 두께','투명 폴리카보네이트 6T','확정','5차 · 이력 4건'],
+ ['REQ-P001-005','경광등 및 부저','적색·황색·녹색 3단과 부저','확정','1차 · 이력 1건'],['REQ-P001-006','분진 흡입 음압','350 Pa','확정','4차 · 이력 3건'],
+ ['REQ-P001-007','HMI 언어','한국어·영어 전환','확정','3차 · 이력 2건'],['REQ-P001-008','품종 전환시간','18 min · 이하','확정','5차 · 이력 3건'],
+ ['REQ-P001-009','노칭 마크 비전검사','선택사양 검토','재검토','5차 · 이력 3건'],['REQ-P001-010','후면 정비공간','800 mm · 이상','확정','5차 · 이력 2건'],
+ ['REQ-P001-011','안전커버 인터록 정지시간','0.5 s · 이내','확정','5차 · 이력 2건'],['REQ-P001-012','최종 승인문서 형식','PDF·DWG','확정','5차 · 이력 1건']
+].map(([id,name,val,st,hist])=>({id,name,val,st,hist}));
+
+const HISTORY=[
+ ['1차 · 2026-11-13 10:00','프로젝트 킥오프 및 초기사양 협의','신규','','40','검토중','초기 요청'],
+ ['2차 · 2026-11-20 14:00','노칭 핵심사양 조정 회의','값변경','40','55','검토중','증산 요청'],
+ ['3차 · 2026-11-27 15:00','기계 및 제어 설계 검토','값변경','55','50','확정','모터 여유율 기준'],
+ ['4차 · 2026-12-04 11:00','고객 설계변경 요청 검토','재검토','50','60','검토중','고객 증산 검토'],
+ ['5차 · 2026-12-11 16:00','최종사양 및 잔여조치 확정','값변경','60','55','확정','']];
+
+const DOCS=[
+ ['DOC-01','킥오프 미팅 기록서','KICKOFF MEETING MINUTES','회의 논의에서 고객 요구와 결정, 후속 조치를 분리해 기록합니다.'],
+ ['DOC-02','설계 사양서','DESIGN SPECIFICATION','회의 요구번호를 기준으로 고객 요구값과 당사 적용값을 연결합니다.'],
+ ['DOC-03','설계변경 요청 및 검토서','DESIGN CHANGE REQUEST AND REVIEW','변경 전후 사양과 승인 상태, 실제 적용 상태를 분리합니다.'],
+ ['DOC-04','제작 및 조립 작업지시서','FABRICATION AND ASSEMBLY WORK ORDER','승인된 도면 개정을 기준으로 작업 지시와 수행 결과를 기록합니다.'],
+ ['DOC-05','검사 및 시운전 체크시트','INSPECTION AND COMMISSIONING CHECKLIST','승인 사양과 실측값을 비교하고 부적합 및 재검사 결과를 남깁니다.']];
+
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const late=t=>t.due&&t.due<TODAY;
+const pname=id=>(PROJECTS.find(p=>p.id===id)||{}).name||id;
+const role=()=>document.getElementById('role').value;
+const mine=()=>TASKS.filter(t=>t.who===role());
+const stClass=s=>({'검토 저장 완료':'green','검토 대기':'amber','직접 검토 필요':'red','제공된 가상자료':'blue','확정':'green','검토중':'amber','재검토':'red','철회':''}[s]||'');
+let reqSel='REQ-P001-001', workF='전체', meetF='전체', reqF='전체';
+
+function taskRow(t,i){
+  const dueBadge=!t.due?'<span class="badge amber">기한 미정</span>':late(t)?'<span class="badge red">기한 지남</span>':'<span class="badge orange">예정</span>';
+  return `<div class="row${i==null?' plain':''}">
+    ${i==null?'':`<div class="rank">${i+1}</div>`}
+    <div><h3>${esc(t.title)}</h3>
+      <div class="meta"><b>${esc(t.who)}</b> · ${esc(t.due||'기한 미정')} · ${esc(t.pid)}</div>
+      <div class="badges">${dueBadge}<span class="badge">${esc(t.state)}</span></div></div>
+    <button class="btn soft" data-toast="업무 시작">업무 시작</button></div>`}
+function meetRow(m){return `<div class="row plain"><div><h3>${esc(m.t)}</h3><div class="meta">${esc(m.p)}</div><div class="meta">${esc(m.w)} · 관리 항목 ${esc(m.c)}</div></div><span class="badge ${stClass(m.s)}">${esc(m.s)}</span></div>`}
+function chips(list,cur,key){return `<div class="chips">${list.map(x=>`<button class="chip${x===cur?' on':''}" data-${key}="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
+function head(t,d,right=''){return `<div class="head head-row"><div><h1>${t}</h1><p>${d}</p></div>${right}</div>`}
+
+const VIEWS={
+ overview(){
+  const first=[...TASKS].filter(late).sort((a,b)=>a.due<b.due?-1:1).slice(0,5);
+  const recent=[...MEETINGS].filter(m=>m.w.slice(0,10)<=TODAY).sort((a,b)=>a.w<b.w?1:-1).slice(0,3);
+  return `<div class="grid"><div class="stack">
+    <section class="tiles" aria-label="바로가기">${TILES.map(([h,n,i,c])=>{const v=c();return `<a class="tile" href="#/${h}">${ic(i)}${v?`<em>${v}</em>`:''}<b>${n}</b></a>`}).join('')}</section>
+    <section><div class="sec"><h2>${ic('fire',24)}먼저 확인할 업무</h2></div>
+      <div class="card">${first.map(taskRow).join('')}<a class="more" href="#/work">업무 전체 보기</a></div></section>
+    <p class="meta" style="padding:0 4px">현황은 등록된 업무를 기준으로 계산합니다. 등록되지 않은 이슈까지 발견했다는 의미는 아닙니다.</p>
+  </div>
+  <aside class="stack">
+    <div class="hero"><small>${esc(role())}님, 오늘의 할 일</small><h2>완료 검토와 담당·기한이 정해지지 않은 업무부터 확인하세요</h2><a href="#/review">완료 검토 열기</a></div>
+    <section class="card kpis" aria-label="업무 현황">
+      <div class="kpi"><span>미완료 업무</span><b>${KPI.open}<small>건</small></b></div>
+      <div class="kpi"><span>PM 확인 대기</span><b>${KPI.pm}<small>건</small></b></div>
+      <div class="kpi"><span>기한 지난 업무</span><b class="alert">${KPI.late}<small>건</small></b></div>
+      <div class="kpi"><span>담당·기한 확인</span><b>${KPI.unset}<small>건</small></b></div>
+    </section>
+    <section><div class="sec"><h2>${ic('folder',24)}진행 프로젝트</h2><a href="#/projects">전체 ${PROJECTS.length}</a></div>
+      <div class="card">${PROJECTS.slice(0,3).map(p=>`<a class="mini" href="#/projects"><h3>${esc(p.name)}</h3><div class="meta">PM ${esc(p.pm)} · 회의록 ${p.mt}건</div></a>`).join('')}</div></section>
+    <section><div class="sec"><h2>${ic('note',24)}최근 회의록</h2><a href="#/meetings">더보기</a></div>
+      <div class="card">${recent.map(m=>`<a class="mini" href="#/meetings"><h3>${esc(m.t)}</h3><div class="meta">${esc(m.w.slice(0,10))} · ${esc(m.s)}</div></a>`).join('')}</div></section>
+  </aside></div>`},
+ projects(){
+  return head('프로젝트','프로젝트별 회의록과 실행 업무를 이어서 관리합니다.','<button class="btn primary" data-toast="프로젝트 만들기">프로젝트 만들기</button>')+
+  `<div class="cards">${PROJECTS.map(p=>{const pct=p.total?Math.round(p.done/p.total*100):0;return `<a class="pcard" href="#/work">${ic('folder')}<h3>${esc(p.name)}</h3><p>${esc(p.d)}</p>
+   ${p.req?`<div class="stat"><span>요구사항 · 변경 이력</span><b>${p.req}</b></div>`:`<div class="stat"><span>후속 업무 완료</span><b>${p.done} / ${p.total}</b></div><div class="bar"><i style="width:${pct}%"></i></div>`}
+   <div class="stat"><span>PM ${esc(p.pm)}</span><span>회의록 ${p.mt}건</span></div></a>`}).join('')}</div>`},
+ work(){
+  const f={'전체':t=>1,'기한 지남':late,'담당·기한 미정':t=>!t.due,'예정':t=>t.due&&!late(t)}[workF];
+  const l=TASKS.filter(f);
+  return head('업무 목록','안건의 배경부터 실행 업무, 다음 결정까지 이어서 확인합니다.','<button class="btn primary" data-toast="업무 등록">업무 등록</button>')+
+  chips(['전체','기한 지남','담당·기한 미정','예정'],workF,'work')+
+  `<div class="card">${l.map(t=>taskRow(t)).join('')||'<div class="empty"><b>해당 업무가 없습니다.</b></div>'}</div>`},
+ requirements(){
+  const l=REQS.filter(r=>reqF==='전체'||r.st===reqF);
+  const r=REQS.find(x=>x.id===reqSel);
+  const detail=r.id==='REQ-P001-001'?`<div class="vals"><div class="val"><span>현재 요청·검토값</span><b>55 m/min</b></div><div class="val"><span>마지막 승인값</span><b>55 m/min</b></div></div>
+   <div class="meta" style="margin-top:10px">담당자 박예린 · 기한 2026-12-11 · 대상 장비 EQ-001</div>
+   <ol class="tl">${HISTORY.map(([when,title,type,a,b,st,why],i)=>`<li class="${st==='확정'?'ok':''}"><span class="n">${i+1}</span><div class="meta">${when}</div><h3>${title}</h3>
+    <div class="change">${a?`<s>${a}</s> → `:''}${b} m/min</div><div class="badges"><span class="badge">${type}</span><span class="badge ${stClass(st)}">${st}</span>${why?`<span class="badge">${why}</span>`:''}</div></li>`).join('')}</ol>`
+   :`<div class="vals"><div class="val"><span>현재 값</span><b style="font-size:16px">${esc(r.val)}</b></div><div class="val"><span>최종 반영</span><b style="font-size:16px">${esc(r.hist)}</b></div></div><p class="meta" style="margin-top:12px">시안에서는 REQ-P001-001의 이력 타임라인만 표시합니다.</p>`;
+  return head('요구사항 이력','회의별 요청값·승인값과 변경 근거를 이어서 확인합니다.')+
+  chips(['전체','확정','재검토'],reqF,'reqf')+
+  `<div class="split"><div class="card">${l.map(x=>`<button class="req" aria-pressed="${x.id===reqSel}" data-req="${x.id}"><code>${x.id}</code><b>${esc(x.name)}</b><span class="meta">${esc(x.val)} · ${esc(x.hist)}</span></button>`).join('')}</div>
+  <div class="card pad"><div class="sec" style="margin:0"><h2>${esc(r.name)}</h2><span class="badge ${stClass(r.st)}">${r.st}</span></div><div class="meta">${r.id}</div>${detail}</div></div>`},
+ mine(){
+  const l=mine();
+  return head(`${esc(role())}님의 업무`,'조치 내용을 기록하고, 마친 업무는 PM에게 검토를 요청하세요.','<button class="btn primary" data-toast="업무 등록">업무 등록</button>')+
+  `<div class="card">${l.map(t=>taskRow(t)).join('')||`<div class="empty"><b>배정된 업무가 없습니다.</b><p>담당자 업무를 보려면 위에서 이준호 또는 정유진으로 바꿔 보세요.</p></div>`}</div>`},
+ review(){
+  return head('완료 검토','담당자의 조치 내용과 근거를 확인하고 완료 또는 보완을 결정하세요.')+
+  `<div class="card empty">${ic('check',40)}<b>현재 완료 검토 요청이 없습니다.</b><p>담당자가 조치 내용을 작성해 검토를 요청하면 여기에 표시됩니다.</p></div>`},
+ meetings(){
+  const f={'전체':m=>1,'검토 대기':m=>m.s==='검토 대기'||m.s==='직접 검토 필요','저장 완료':m=>m.s==='검토 저장 완료'}[meetF];
+  return head('회의록','회의에서 나온 요구사항과 후속 조치를 한곳에서 확인하세요.','<a class="btn primary" href="#/new">새 회의록</a>')+
+  chips(['전체','검토 대기','저장 완료'],meetF,'meet')+
+  `<div class="card">${[...MEETINGS].filter(f).sort((a,b)=>a.w<b.w?1:-1).map(meetRow).join('')}</div>`},
+ documents(){
+  return head('핵심 문서 5종','변경된 PNT 핵심 양식의 항목과 문서 간 연결 기준을 확인합니다.')+
+  `<div class="engine"><div class="pcard"><span class="badge orange">엔진 1</span><h3 style="margin-top:8px">문서 해석 엔진</h3><p>생성형 AI · Qwen3-4B-Instruct-2507 4bit. 회의록에서 고객 요구, 설계변경, 후속 조치와 원문 근거를 추출합니다.</p></div>
+   <div class="pcard"><span class="badge blue">엔진 2</span><h3 style="margin-top:8px">근거 규칙 검증 엔진</h3><p>결정형 규칙 · Pydantic 스키마. 출력 형식, 근거 번호, 담당자와 기한, 상태 전이를 검증합니다.</p></div></div>
+   <div class="cards">${DOCS.map(([id,n,e,d])=>`<div class="pcard">${ic('docs')}<div class="meta">${id} · ${e}</div><h3>${n}</h3><p>${d}</p></div>`).join('')}</div>`},
+ guide(){
+  return head('체험 방법','회의록 등록부터 PM 완료 확인까지의 흐름입니다.')+
+  `<ol class="card steps-list"><li><div><b>회의록 입력</b><span>Word 문서를 올리거나 회의 내용을 붙여넣습니다.</span></div></li><li><div><b>AI 분석과 내용 검토</b><span>고객 요구, 설계변경, 후속 조치를 원문과 비교해 확인합니다.</span></div></li><li><div><b>업무 등록과 조치 기록</b><span>담당자가 조치 내용을 작성하고 PM에게 검토를 요청합니다.</span></div></li><li><div><b>PM 완료 확인</b><span>조치 내용과 근거를 보고 완료하거나 보완을 요청합니다.</span></div></li></ol>
+   <p class="meta" style="margin-top:12px">이 PC에 저장되는 로컬 MVP이며, 체험 역할은 실제 로그인이 아닙니다.</p>`},
+ new(){
+  return head('새 회의록 입력','Word 문서를 올리거나 회의 내용을 직접 붙여넣어 주세요.','<a class="btn soft" href="#/meetings">목록으로</a>')+
+  `<div class="steps"><span class="chip on">1 회의록 입력</span><span class="chip">2 AI 분석</span><span class="chip">3 내용 검토</span><span class="chip">4 저장 완료</span></div>
+  <div class="card pad"><div class="fields"><label class="field">회의명<input placeholder="예: 코팅 설비 설계 검토 회의"></label><label class="field">프로젝트명<input placeholder="프로젝트를 구분할 이름"></label><label class="field">회의 일시<input placeholder="예: 2026-11-04 14:00"></label></div>
+  <div class="drop">Word 회의록을 여기에 놓아 주세요<small>.docx · 최대 4MB · 본문과 표의 텍스트를 불러옵니다</small></div>
+  <label class="field">회의록 원문<textarea placeholder="회의 안건&#10;&#10;논의 내용&#10;&#10;결정 사항&#10;&#10;추가 확인 사항&#10;&#10;후속 조치"></textarea></label>
+  <div class="actions"><button class="btn soft" data-toast="예시 불러오기">예시 불러오기</button><button class="btn primary" data-toast="AI로 분석하기">AI로 분석하기</button></div></div>`},
+ search(q){
+  const k=q.toLowerCase(),has=s=>String(s).toLowerCase().includes(k);
+  const t=TASKS.filter(x=>has(x.title)||has(x.who)||has(x.pid)),m=MEETINGS.filter(x=>has(x.t)||has(x.p)),r=REQS.filter(x=>has(x.name)||has(x.id));
+  return head(`"${esc(q)}" 검색 결과`,`업무 ${t.length}건 · 회의록 ${m.length}건 · 요구사항 ${r.length}건`)+
+  `<div class="stack">${t.length?`<div class="card">${t.map(x=>taskRow(x)).join('')}</div>`:''}${m.length?`<div class="card">${m.map(meetRow).join('')}</div>`:''}${r.length?`<div class="card">${r.map(x=>`<a class="mini" href="#/requirements" data-req="${x.id}"><h3>${esc(x.name)}</h3><div class="meta">${x.id} · ${esc(x.val)}</div></a>`).join('')}</div>`:''}${!t.length&&!m.length&&!r.length?'<div class="card empty"><b>검색 결과가 없습니다.</b></div>':''}</div>`}
+};
+
+let query='';
+function render(){
+  const r=(location.hash.replace('#/','')||'overview');
+  const name=VIEWS[r]?r:'overview';
+  document.getElementById('nav').innerHTML=MENU.map(([h,n])=>`<a class="chip" href="#/${h}"${h===name?' aria-current="page"':''}>${n}</a>`).join('');
+  document.getElementById('app').innerHTML=name==='search'?VIEWS.search(query):VIEWS[name]();
+}
+let timer;
+function toast(n){const t=document.getElementById('toast');t.textContent=`디자인 시안이라 '${n}' 기능은 동작하지 않습니다.`;t.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>t.classList.remove('show'),2000)}
+addEventListener('hashchange',()=>{render();scrollTo(0,0)});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-toast],[data-work],[data-meet],[data-req],[data-reqf]');if(!b)return;
+  const d=b.dataset;
+  if(d.toast)toast(d.toast);
+  if(d.work){workF=d.work;render()}
+  if(d.meet){meetF=d.meet;render()}
+  if(d.reqf){reqF=d.reqf;render()}
+  if(d.req){reqSel=d.req;if(!location.hash.includes('requirements'))return;render()}
+});
+document.getElementById('role').addEventListener('change',render);
+document.getElementById('searchForm').addEventListener('submit',e=>{e.preventDefault();query=document.getElementById('q').value.trim();if(!query)return;if(location.hash==='#/search')render();else location.hash='#/search'});
+render();
+</script>
+</body>
+</html>
