@@ -133,11 +133,16 @@ def check_day(w,value,label):
  try:return w.due(value)
  except HTTPException:raise HTTPException(422,f'{label}은(는) YYYY-MM-DD 형식의 날짜여야 합니다.')
 def item_status(it,today):
- if it.get('progress',0)>=100 or it.get('done_at'):return '완료'
+ progress=it.get('progress')
+ if progress is None:progress=100 if it.get('done_at') else 0
+ if progress>=100:return '완료'
  end=it.get('end') or it.get('start')
  if end and end<today:return '지연'
  if it.get('start') and it['start']<=today:return '진행중'
  return '예정'
+def completion_date(progress,previous,stamp):
+ return (previous or stamp) if progress>=100 else None
+
 def spread_dates(start,end):
  """Default milestone dates spread across the project period by phase weight; None when the period is unknown."""
  if not (start and end) or start>end:return {}
@@ -251,7 +256,6 @@ def parse_schedule_sheet(ws):
    start=end=day
   else:
    if not start and not end:problems.append(f'{n}행 "{title}": 날짜가 없어 미정으로 등록')
-   start=start or end;end=end or start
    if start and end and start>end:start,end=end,start;problems.append(f'{n}행 "{title}": 시작일이 종료일보다 늦어 서로 바꿈')
   entry={'kind':kind,'phase':phase,'title':title[:200],'owner_name':str(get(row,'담당자') or '').strip()[:80],'start':start,'end':end,'progress':parse_progress(get(row,'진행률')),'key':truthy(get(row,'핵심')),'depends_on':str(get(row,'선행작업') or '').strip()[:200],'note':str(get(row,'비고') or '').strip()[:1000],'row':n}
   dup=next((i for i,x in enumerate(out) if x['phase']==phase and x['title']==entry['title']),None)
@@ -283,24 +287,33 @@ def match_owner(name,people,members):
  hits=[p for p in people if p['id'] in members and p['name']==name.strip()]
  return hits[0]['id'] if len(hits)==1 else None
 
+def schedule_owner(item,people_by_id):
+ return people_by_id.get(item.get('owner_id'),{}).get('name') or item.get('owner_name','')
+
 def apply_import(w,c,p,actor,rows,info,mode,import_id,people):
- today=datetime.now(w.KST).date().isoformat()
+ people_by_id={person['id']:person for person in people}
  existing={ (x['phase'],x['title']):x for x in w.all_records(c,'schedule_item') if x['project_id']==p['id'] and not x.get('deleted_at')}
  added=changed=removed=unchanged=0;seen=set();stamp=w.now()
  for r in rows:
   key=(r['phase'],r['title']);seen.add(key);old=existing.get(key)
   owner_id=match_owner(r['owner_name'],people,p['members'])
-  fieldsd={'kind':r['kind'],'owner_id':owner_id,'owner_name':r['owner_name'],'start':r['start'],'end':r['end'],'progress':r['progress'],'key':r['key'],'depends_on':r['depends_on'],'note':r['note']}
+  start,end=r['start'],r['end']
+  # Keep a saved partial date when the downloaded row is uploaded unchanged.
+  if old is None or (start,end)!=(old.get('start'),old.get('end')):
+   start,end=start or end,end or start
+  fieldsd={'kind':r['kind'],'owner_id':owner_id,'owner_name':r['owner_name'],'start':start,'end':end,'progress':r['progress'],'key':r['key'],'depends_on':r['depends_on'],'note':r['note']}
   if old:
+   if old.get('owner_id') and r['owner_name']==schedule_owner(old,people_by_id):
+    fieldsd.update(owner_id=old.get('owner_id'),owner_name=old.get('owner_name',''))
    diff={k:{'before':old.get(k),'after':v} for k,v in fieldsd.items() if old.get(k)!=v and not (k=='note' and not v)}
    if not diff:unchanged+=1;continue
-   if 'note' in diff and not r['note']:diff.pop('note')
-   old.update({k:v['after'] for k,v in diff.items()},version=old['version']+1,updated_at=stamp,source='엑셀' if old.get('source')!='기본' else '기본',import_id=import_id)
+   done_at=completion_date(r['progress'],old.get('done_at'),stamp)
+   old.update({k:v['after'] for k,v in diff.items()},version=old['version']+1,updated_at=stamp,done_at=done_at,source='엑셀' if old.get('source')!='기본' else '기본',import_id=import_id)
    w.save(c,'schedule_item',old)
    action='기간 변경' if ({'start','end'}&set(diff)) else '진행률 변경' if 'progress' in diff else '내용 변경'
    record_change(w,c,p['id'],actor,'엑셀',old['kind'],old['id'],old['title'],old['phase'],action,diff,'엑셀 업로드');changed+=1
   else:
-   item={'id':w.uid(),'project_id':p['id'],'phase':r['phase'],'title':r['title'],**fieldsd,'source':'엑셀','import_id':import_id,'version':1,'created_at':stamp,'updated_at':stamp,'created_by':actor,'done_at':None,'deleted_at':None}
+   item={'id':w.uid(),'project_id':p['id'],'phase':r['phase'],'title':r['title'],**fieldsd,'source':'엑셀','import_id':import_id,'version':1,'created_at':stamp,'updated_at':stamp,'created_by':actor,'done_at':completion_date(r['progress'],None,stamp),'deleted_at':None}
    w.save(c,'schedule_item',item);record_change(w,c,p['id'],actor,'엑셀',item['kind'],item['id'],item['title'],item['phase'],'추가',{'start':{'before':None,'after':item['start']},'end':{'before':None,'after':item['end']}},'엑셀 업로드');added+=1
  if mode=='replace':
   for key,old in existing.items():
@@ -329,38 +342,49 @@ def build_workbook(w,c,actor,project_id,today,template=False):
   for i,n in enumerate(names,start=1):
    cell=sheet.cell(row=1,column=i,value=n);cell.font=head_font;cell.fill=head_fill;cell.alignment=Alignment(horizontal='center',vertical='center');cell.border=border
   sheet.row_dimensions[1].height=22;sheet.freeze_panes='A2'
+ def write_row(sheet,index,values):
+  for col,val in enumerate(values,start=1):
+   cell=sheet.cell(row=index,column=col,value=val);cell.border=border
+   if isinstance(val,str):cell.data_type='s'
+ def item_row(it):
+  return [it['phase'],it['kind'],it['title'],schedule_owner(it,people),it.get('start'),it.get('end'),it.get('progress',0),'Y' if it.get('key') else '',it.get('depends_on',''),it.get('note','')]
  header(ws,EXCEL_HEADERS)
  widths=[14,10,34,12,12,12,8,6,22,36]
  for i,wd in enumerate(widths,start=1):ws.column_dimensions[get_column_letter(i)].width=wd
  people={p['id']:p for p in w.all_records(c,'person')}
  if template:
-  ps=visible_projects(w,c,actor,project_id) if project_id else []
-  p=ps[0] if ps else None
-  sample_dates=spread_dates(p.get('start'),p.get('end')) if p else spread_dates(today,(date.fromisoformat(today)+timedelta(days=180)).isoformat())
-  counts={};index={};r=2
-  for phase,title,key,criterion in DEFAULT_MILESTONES:counts[phase]=counts.get(phase,0)+1
-  for phase,title,key,criterion in DEFAULT_MILESTONES:
-   i=index.get(phase,0);index[phase]=i+1;day=phase_of_date(sample_dates,phase,i,counts[phase])
-   for col,val in enumerate([phase,'마일스톤',title,'',None,day,'','Y' if key else '','',criterion],start=1):ws.cell(row=r,column=col,value=val).border=border
-   r+=1
-  example=[('설계 및 변경','항목','기본 설계도 작성','',sample_dates.get('수주'),sample_dates.get('설계 및 변경'),30,'','고객 사양 확정','예시 행입니다. 지우고 사용하세요.')]
-  for row in example:
-   for col,val in enumerate(row,start=1):ws.cell(row=r,column=col,value=val).border=border
-   r+=1
+  p=None
+  if project_id:
+   snap=snapshot(w,c,actor,project_id,today)
+   p=snap['projects'][0]
+   for r,it in enumerate(snap['items'],start=2):
+    row=item_row(it)
+    row[6]=row[6]/100
+    write_row(ws,r,row)
+    ws.cell(row=r,column=7).number_format='0%'
+  else:
+   sample_dates=spread_dates(today,(date.fromisoformat(today)+timedelta(days=180)).isoformat())
+   counts={};index={};r=2
+   for phase,title,key,criterion in DEFAULT_MILESTONES:counts[phase]=counts.get(phase,0)+1
+   for phase,title,key,criterion in DEFAULT_MILESTONES:
+    i=index.get(phase,0);index[phase]=i+1;day=phase_of_date(sample_dates,phase,i,counts[phase])
+    write_row(ws,r,[phase,'마일스톤',title,'',None,day,'','Y' if key else '','',criterion])
+    r+=1
+   write_row(ws,r,['설계 및 변경','항목','기본 설계도 작성','',sample_dates.get('수주'),sample_dates.get('설계 및 변경'),30,'','고객 사양 확정','예시 행입니다. 지우고 사용하세요.'])
   dv=DataValidation(type='list',formula1='"'+','.join(PHASES)+'"',allow_blank=False);dv.error='단계 목록에서 골라 주세요.';ws.add_data_validation(dv);dv.add(f'A2:A500')
   dv2=DataValidation(type='list',formula1='"마일스톤,항목"',allow_blank=True);ws.add_data_validation(dv2);dv2.add('B2:B500')
   guide=wb.create_sheet('작성 안내')
   lines=['PNT 프로젝트 일정 양식','',
    '· 단계: '+' → '.join(PHASES),'· 구분: 마일스톤(하루짜리 완료 기준점) 또는 항목(기간이 있는 작업). 비우면 항목으로 봅니다.',
-   '· 날짜: 2026-11-13 또는 2026.11.13 형식. 마일스톤은 종료일만 적어도 됩니다.','· 진행률: 0~100 숫자. 핵심: 핵심 마일스톤이면 Y.',
+   '· 날짜: 2026-11-13 또는 2026.11.13 형식. 마일스톤은 종료일만 적어도 됩니다.','· 진행률: 50%처럼 퍼센트 기호를 붙여 입력하세요. 핵심: 핵심 마일스톤이면 Y.',
    '· 담당자: 프로젝트 참여자 이름과 같으면 자동 연결되고, 아니면 이름 그대로 표시합니다.',
    '· 같은 단계·같은 항목명이 이미 있으면 그 항목을 갱신하고, 변경 내용은 변경 이력에 남습니다.',
    '· "프로젝트" 시트의 착수일·납기일·고객사·장비는 프로젝트 정보에 반영됩니다. (PM만 업로드 가능)']
   for i,l in enumerate(lines,start=1):guide.cell(row=i,column=1,value=l).font=Font(bold=(i==1),size=13 if i==1 else 11)
   guide.column_dimensions['A'].width=110
   pj=wb.create_sheet('프로젝트');header(pj,['프로젝트번호','프로젝트명','고객사','장비·호기','착수일','납기일'])
-  vals=[p.get('code') or p['id'],p['name'],p.get('customer',''),p.get('equipment',''),p.get('start'),p.get('end')] if p else ['PNT-SIM-001','구미 전극 노칭기 프로젝트 01','고객 SIM-01','전극 노칭기 1호기',today,(date.fromisoformat(today)+timedelta(days=180)).isoformat()]
-  for i,v in enumerate(vals,start=1):pj.cell(row=2,column=i,value=v).border=border
+  vals=[p['code'],p['name'],p['customer'],p['equipment'],p['planned_start'],p['planned_end']] if p else ['PNT-SIM-001','구미 전극 노칭기 프로젝트 01','고객 SIM-01','전극 노칭기 1호기',today,(date.fromisoformat(today)+timedelta(days=180)).isoformat()]
+  write_row(pj,2,vals)
   for i,wd in enumerate([16,34,16,20,12,12],start=1):pj.column_dimensions[get_column_letter(i)].width=wd
   return wb
  snap=snapshot(w,c,actor,project_id,today);r=2
@@ -369,8 +393,7 @@ def build_workbook(w,c,actor,project_id,today,template=False):
  if multi:
   ws.insert_cols(1);ws.cell(row=1,column=1,value='프로젝트').font=head_font;ws.cell(row=1,column=1).fill=head_fill;ws.column_dimensions['A'].width=30
  for it in snap['items']:
-  owner=people.get(it.get('owner_id'),{}).get('name') or it.get('owner_name','')
-  row=[it['phase'],it['kind'],it['title'],owner,it.get('start'),it.get('end'),it.get('progress',0),'Y' if it.get('key') else '',it.get('depends_on',''),it.get('note','')]
+  row=item_row(it)
   if multi:row=[names[it['project_id']]['name']]+row
   for col,val in enumerate(row,start=1):ws.cell(row=r,column=col,value=val).border=border
   r+=1
@@ -433,6 +456,8 @@ def build_router(w):
   wb=read_workbook(data)
   sheet=next((wb[n] for n in wb.sheetnames if n.strip() in ('일정','일정표','schedule','Schedule')),wb[wb.sheetnames[0]])
   rows,problems=parse_schedule_sheet(sheet)
+  if mode=='replace' and not rows:
+   raise HTTPException(422,'유효한 일정 행이 없어 엑셀 기준으로 맞출 수 없습니다. '+' '.join(problems[:3]))
   info=parse_project_sheet(wb['프로젝트']) if '프로젝트' in wb.sheetnames else {}
   if not rows and not info:raise HTTPException(422,'반영할 행이 없습니다. '+' '.join(problems[:3]))
   created=False
@@ -477,10 +502,10 @@ def build_router(w):
     if merged.get('start') and merged.get('end') and merged['start']>merged['end']:raise HTTPException(422,'시작일은 종료일보다 늦을 수 없습니다.')
    diff={k:{'before':it.get(k),'after':v} for k,v in new.items() if it.get(k)!=v}
    if not diff:return {**it,'status':item_status(it,today())}
-   if 'progress' in diff:merged['done_at']=w.now() if merged['progress']>=100 else None;diff.setdefault('done_at',{'before':it.get('done_at'),'after':merged['done_at']})
+   if 'progress' in diff:merged['done_at']=completion_date(merged['progress'],None,w.now())
    merged.update(version=it['version']+1,updated_at=w.now());w.save(c,'schedule_item',merged)
    action='기간 변경' if {'start','end'}&set(diff) else '완료' if merged.get('progress',0)>=100 and 'progress' in diff else '진행률 변경' if 'progress' in diff else '단계 변경' if 'phase' in diff else '담당자 변경' if {'owner_id','owner_name'}&set(diff) else '내용 변경'
-   record_change(w,c,p['id'],actor['id'],'직접',merged['kind'],iid,merged['title'],merged['phase'],action,{k:v for k,v in diff.items() if k!='done_at'},body.reason.strip())
+   record_change(w,c,p['id'],actor['id'],'직접',merged['kind'],iid,merged['title'],merged['phase'],action,diff,body.reason.strip())
    merged['status']=item_status(merged,today());return merged
  @r.post('/schedule/items/{iid}/delete')
  def delete_item(iid:str,body:ItemDelete,actor=Depends(w.user)):
