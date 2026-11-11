@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),esbuild=require('esbuild'),path=require('node:path');
+const out=esbuild.buildSync({entryPoints:[path.join(__dirname,'assignment_queue.js')],bundle:true,format:'cjs',write:false,platform:'node'});
+const mod={exports:{}};new Function('module','exports',out.outputFiles[0].text)(mod,mod.exports);
+const{unassignedFieldIssues,assignmentWaitingCount}=mod.exports;
+const field={id:'field',project_id:'p1',kind:'업무',status:'미착수',owner_id:null,events:[{action:'현장 이슈 접수'}]};
+const tasks=[field,{...field,id:'assigned',owner_id:'team2'},{...field,id:'done',status:'완료'},{...field,id:'deleted',deleted_at:'today'},{...field,id:'manual',events:[{action:'업무 등록'}]},{...field,id:'confirmation',kind:'확인사항',reviewer_id:'team2'}];
+const before=JSON.stringify(tasks);
+assert.deepEqual(unassignedFieldIssues(tasks).map(t=>t.id),['field']);
+assert.equal(unassignedFieldIssues(tasks)[0],field,'Use the existing record, not a copied candidate');
+assert.equal(assignmentWaitingCount([{pending:2},{pending:0},{}],tasks),3);
+assert.equal(JSON.stringify(tasks),before,'Reading a queue must not write task data');
+assert.equal(assignmentWaitingCount([{pending:2}],tasks.map(t=>({...t,owner_id:'team2'}))),2,'After assignment only the remaining proposals count');
+assert.equal(unassignedFieldIssues(tasks.filter(t=>t.project_id==='p2')).length,0,'Respect the selected project scope');
+assert.equal(assignmentWaitingCount([],[]),0);
+console.log('PASS: pending field issues, same task identity, assigned/completed/deleted exclusion, scoped counts, immutable reads.');
