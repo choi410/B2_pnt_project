@@ -1,0 +1,17 @@
+{
+  "name": "b2-portable-workspace",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node work/v17/build.cjs",
+    "test": "node work/v17/test_calendar.cjs && node work/v17/test_flow.cjs && node work/v17/test_story.cjs && node work/v17/test_assignment_queue.cjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "0.468.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

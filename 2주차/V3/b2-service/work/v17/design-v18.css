@@ -1,0 +1,256 @@
+/* design-v18.css — theme.css 뒤에 합쳐 적용.
+   범위: 홈 대시보드(dashboard.jsx), 업무 탭 제안 목록(work_proposals.jsx .work-proposals), 등록 단계·후속 업무 선택·등록 결과(composer_v18.jsx).
+   CandidateEditor·.candidate-actions·.back-link·.button-group·.home-list-tools는 theme.css 기존 스타일을 유지하고 주변만 조정한다.
+   원칙: PNT 남색/파랑 + 절제된 녹색 포인트. 목록 중심, 명확한 구획, 큰 숫자 카드·중첩 카드 금지,
+   글자 최소 12px(보조 11px), 키보드 포커스 표시, 좁은 화면 대응. display:none으로 기능을 숨기지 않음. */
+
+:root{
+ --v18-ink:#1f3047;          /* 본문 */
+ --v18-ink-2:#4a5d73;        /* 보조 본문 */
+ --v18-ink-3:#6c7e91;        /* 설명 */
+ --v18-line:#d9e1ea;
+ --v18-line-strong:#c6d2df;
+ --v18-panel:#ffffff;
+ --v18-panel-2:#f7f9fb;
+ --v18-blue:#174a8b;
+ --v18-blue-soft:#e9f0fa;
+ --v18-navy:#132f52;
+ --v18-green:#5f7a14;        /* 포인트 녹색은 글자용으로 채도를 낮춤 */
+ --v18-green-soft:#eef3dd;
+ --v18-amber:#8a6514;
+ --v18-amber-soft:#fbf2da;
+ --v18-red:#a8433a;
+ --v18-red-soft:#fbeae7;
+ --v18-focus:#2d6fc2;
+ --v18-radius:8px;
+}
+
+/* ───────── 공통: 포커스 ───────── */
+.dash-brief-item:focus-visible,.dash-project-row:focus-visible,.dash-item:focus-visible,.dash-shortcuts button:focus-visible,
+.proposal-meeting-row:focus-visible,.registration-result .button-group .btn:focus-visible{
+ outline:2px solid var(--v18-focus);outline-offset:2px;border-radius:var(--v18-radius)}
+
+/* ───────── 공통 유틸 ───────── */
+.clamp-1,.clamp-2{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;word-break:keep-all;overflow-wrap:anywhere}
+.clamp-1{-webkit-line-clamp:1}
+.clamp-2{-webkit-line-clamp:2}
+.dash-unset{color:#8b9bad;font-weight:400}
+.is-late{color:var(--v18-red)}
+.is-missing{color:var(--v18-amber)}
+.dash-count{display:inline-block;margin-left:6px;font-size:12px;font-weight:600;color:var(--v18-ink-3);vertical-align:2px}
+.dash-help{margin:-8px 0 12px;font-size:12px;line-height:1.7;color:var(--v18-ink-3)}
+.dash-clear{margin:0;padding:14px 16px;border:1px dashed var(--v18-line);border-radius:var(--v18-radius);font-size:12.5px;color:var(--v18-ink-3);background:var(--v18-panel-2)}
+.dash-back{font-size:12px;letter-spacing:0;text-transform:none}
+.page-head .eyebrow .dash-back{margin:-4px 0 0 -2px}
+
+/* ───────── 전체 현황 요약 (작은 지표 한 줄) ───────── */
+.dash-brief{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:-10px 0 22px}
+.dash-brief-item{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border:1px solid var(--v18-line);border-radius:999px;background:var(--v18-panel);font-size:12.5px;color:var(--v18-ink-2);text-align:left}
+.dash-brief-item b{font-size:14px;font-weight:700;color:var(--v18-ink);font-variant-numeric:tabular-nums}
+button.dash-brief-item{cursor:pointer;transition:border-color .15s,background .15s}
+button.dash-brief-item:hover{border-color:var(--v18-line-strong);background:var(--v18-panel-2)}
+button.dash-brief-item svg{color:#9aaabb}
+.dash-brief-item.is-late{border-color:#ecc9c4;background:var(--v18-red-soft)}
+.dash-brief-item.is-late b{color:var(--v18-red)}
+.dash-brief-item.is-missing{border-color:#ecd9a8;background:var(--v18-amber-soft)}
+.dash-brief-item.is-missing b{color:var(--v18-amber)}
+
+/* ───────── 프로젝트 비교 목록 ───────── */
+.dash-table{background:var(--v18-panel);border:1px solid var(--v18-line);border-radius:var(--v18-radius);overflow:hidden}
+.dash-table-head,.dash-project-row{display:grid;grid-template-columns:minmax(190px,1.3fr) minmax(170px,1.7fr) 128px 92px 84px 118px minmax(130px,1fr) 16px;gap:14px;align-items:center;padding:0 20px}
+.dash-table-head{min-height:40px;background:var(--v18-panel-2);border-bottom:1px solid var(--v18-line);font-size:11.5px;font-weight:600;color:var(--v18-ink-3);letter-spacing:.2px}
+.dash-table-head .column-sort{padding:0;font-size:inherit;color:inherit}
+.dash-project-row{width:100%;min-height:68px;padding-top:12px;padding-bottom:12px;text-align:left;border-top:1px solid #eef2f6;background:transparent;cursor:pointer;transition:background .12s}
+.dash-project-row:first-of-type{border-top:0}
+.dash-project-row:hover{background:#f9fbfd}
+.dash-project-row>svg{color:#a3b1c1}
+.dash-cell-name{display:flex;flex-direction:column;gap:3px;min-width:0}
+.dash-cell-name b{font-size:14px;font-weight:700;color:var(--v18-ink);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-cell-name small{font-size:11.5px;color:var(--v18-ink-3);display:flex;gap:4px;align-items:center;white-space:nowrap;overflow:hidden}
+.dash-cell-name small .person span{font-size:11.5px}
+.dash-cell-purpose{font-size:12.5px;line-height:1.55;color:var(--v18-ink-2);min-width:0}
+.dash-cell-stage{min-width:0}
+.dash-stage{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 9px;border-radius:4px;background:var(--v18-blue-soft);color:var(--v18-blue);font-size:12px;font-weight:600}
+.dash-cell-num{display:flex;flex-direction:column;gap:1px;font-variant-numeric:tabular-nums}
+.dash-cell-num b{font-size:15px;font-weight:700;color:var(--v18-ink);line-height:1.3}
+.dash-cell-num.is-late b{color:var(--v18-red)}
+.dash-sub{font-size:11px;font-weight:600}
+.dash-cell-date{display:flex;flex-direction:column;gap:2px;min-width:0;font-variant-numeric:tabular-nums}
+.dash-cell-date b{font-size:13.5px;font-weight:700;color:var(--v18-ink);line-height:1.3}
+.dash-cell-date small{font-size:11.5px;color:var(--v18-ink-3);line-height:1.4}
+.dash-cell-date .dash-unset{font-size:12px;line-height:1.4}
+
+/* ───────── 프로젝트 하나: 단계·다음 목표 ───────── */
+.dash-direction{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,.8fr);gap:24px;align-items:start;margin:-14px 0 26px;padding:14px 0 18px;border-bottom:1px solid var(--v18-line)}
+.dash-stages{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;font-size:12.5px;color:var(--v18-ink-3)}
+.dash-stages svg{color:#aab6c4;flex:none}
+.dash-stages span{padding:4px 10px;border:1px solid var(--v18-line);border-radius:999px;background:var(--v18-panel);white-space:nowrap}
+.dash-stages span.current{border-color:var(--v18-blue);background:var(--v18-blue);color:#fff;font-weight:600}
+.dash-stages span.current::after{content:' · 현재';font-weight:400;opacity:.85}
+.dash-next-goal{margin:0;font-size:13px;line-height:1.7;color:var(--v18-ink)}
+.dash-next-goal small{display:block;font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--v18-ink-3);margin-bottom:3px}
+
+/* ───────── 프로젝트 하나: 본문 2열 ───────── */
+.dash-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:36px;align-items:start}
+.dash-main,.dash-side{display:flex;flex-direction:column;gap:30px;min-width:0}
+.dash-block .section-title h2{font-size:16px;font-weight:700;color:var(--v18-ink);margin:0}
+.dash-block>.text-link{margin-top:10px}
+.dash-side .period-calendar{margin:0}
+
+/* 막힌 일 목록 */
+.dash-list{display:flex;flex-direction:column;background:var(--v18-panel);border:1px solid var(--v18-line);border-radius:var(--v18-radius);overflow:hidden}
+.dash-item{display:grid;grid-template-columns:84px minmax(0,1fr) auto 16px;gap:14px;align-items:center;width:100%;padding:12px 16px;text-align:left;border-top:1px solid #eef2f6;background:transparent;cursor:pointer;transition:background .12s}
+.dash-item:first-child{border-top:0}
+.dash-item:hover{background:#f9fbfd}
+.dash-item>svg{color:#a3b1c1}
+.dash-item-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dash-item-main b{font-size:13.5px;font-weight:600;color:var(--v18-ink);line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dash-item-main small{font-size:11.5px;color:var(--v18-ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-reason{display:inline-flex;justify-content:center;align-items:center;min-height:24px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:700;white-space:nowrap;background:#edf0f4;color:var(--v18-ink-2)}
+.dash-reason.r-기한지남{background:var(--v18-red-soft);color:var(--v18-red)}
+.dash-reason.r-담당미정,.dash-reason.r-기한미정{background:var(--v18-amber-soft);color:var(--v18-amber)}
+.dash-reason.r-검토대기{background:var(--v18-blue-soft);color:var(--v18-blue)}
+.dash-reason.r-보완요청{background:#faece6;color:#b15545}
+.dash-reason.r-추가확인{background:#f4edf8;color:#865c9a}
+
+/* 바로가기 */
+.dash-shortcuts{display:flex;flex-direction:column;border:1px solid var(--v18-line);border-radius:var(--v18-radius);background:var(--v18-panel);overflow:hidden}
+.dash-shortcuts button{display:grid;grid-template-columns:18px minmax(0,1fr) 16px;gap:12px;align-items:center;padding:12px 14px;text-align:left;border-top:1px solid #eef2f6;background:transparent;cursor:pointer}
+.dash-shortcuts button:first-child{border-top:0}
+.dash-shortcuts button:hover{background:#f9fbfd}
+.dash-shortcuts svg{color:var(--v18-blue)}
+.dash-shortcuts button>svg:last-child{color:#a3b1c1}
+.dash-shortcuts b{display:block;font-size:13px;font-weight:600;color:var(--v18-ink);line-height:1.4}
+.dash-shortcuts small{display:block;font-size:11.5px;color:var(--v18-ink-3);line-height:1.5;margin-top:1px}
+
+/* ───────── 업무 탭: 제안 목록 (.work-proposals) ─────────
+   실제 마크업(work_proposals.jsx): section.work-proposals
+     목록: .home-list-tools(기존) → .proposal-meetings > button.proposal-meeting-row [svg, span(b, small, span.proposal-preview), span.proposal-row-count(strong), svg]
+     상세: button.back-link(기존) → .section-title(div(h2,p), Button) → section.proposal-linked(h3, TaskRows) → .section-title(h3, span)
+           → div(p.proposal-requested + CandidateEditor(기존)) … → .candidate-actions(기존) */
+.work-proposals{display:flex;flex-direction:column;gap:18px}
+.work-proposals .home-list-tools{margin:0}
+.work-proposals .home-list-tools>.muted{margin:0;line-height:1.7}
+.proposal-meetings{display:flex;flex-direction:column;background:var(--v18-panel);border:1px solid var(--v18-line);border-radius:var(--v18-radius);overflow:hidden}
+.proposal-meeting-row{display:grid;grid-template-columns:20px minmax(0,1fr) auto 16px;gap:14px;align-items:center;width:100%;padding:14px 18px;text-align:left;border-top:1px solid #eef2f6;background:transparent;cursor:pointer;transition:background .12s}
+.proposal-meeting-row:first-child{border-top:0}
+.proposal-meeting-row:hover{background:#f9fbfd}
+.proposal-meeting-row>svg:first-child{color:var(--v18-ink-3)}
+.proposal-meeting-row>svg:last-child{color:#a3b1c1}
+.proposal-meeting-row>span:nth-child(2){display:flex;flex-direction:column;gap:2px;min-width:0}
+.proposal-meeting-row b{font-size:14px;font-weight:700;color:var(--v18-ink);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proposal-meeting-row small{font-size:11.5px;color:var(--v18-ink-3)}
+.proposal-preview{display:block;margin-top:3px;font-size:12.5px;color:var(--v18-ink-2);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proposal-row-count{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-size:12.5px;font-weight:600;color:var(--v18-blue);white-space:nowrap;font-variant-numeric:tabular-nums}
+.proposal-row-count strong{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:4px;background:var(--v18-amber-soft);color:var(--v18-amber)}
+.work-proposals .section-title{margin-bottom:12px}
+.work-proposals .section-title h2{margin:0;font-size:17px;font-weight:700;color:var(--v18-ink)}
+.work-proposals .section-title h3{margin:0;font-size:14px;font-weight:700;color:var(--v18-ink)}
+.work-proposals .section-title p{margin:3px 0 0;font-size:12.5px;color:var(--v18-ink-3)}
+.work-proposals .section-title>span{font-size:12px;color:var(--v18-ink-3)}
+.proposal-linked{padding:14px 16px 16px;border:1px solid var(--v18-line);border-radius:var(--v18-radius);background:var(--v18-panel-2)}
+.proposal-linked h3{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--v18-ink-2)}
+.proposal-linked .task-table{background:var(--v18-panel)}
+.proposal-requested{display:inline-flex;align-items:center;gap:4px;margin:0 0 6px;padding:3px 9px;border-radius:4px;background:var(--v18-amber-soft);color:var(--v18-amber);font-size:11.5px;font-weight:700}
+.proposal-requested .person span{font-size:11.5px;font-weight:600}
+.work-proposals .candidate-actions{margin-top:6px}
+.work-proposals .candidate-actions>span{margin-right:auto;font-size:12.5px;color:var(--v18-ink-2)}
+
+/* ───────── 등록 단계 표시 (.registration-steps) ─────────
+   실제 마크업(composer_v18.jsx): ol.registration-steps > li.active|done|'' > span(번호) + 텍스트 (+ small '선택') */
+.registration-steps{display:flex;list-style:none;margin:0 0 22px;padding:0;border:1px solid var(--v18-line);border-radius:var(--v18-radius);background:var(--v18-panel);overflow-x:auto;scrollbar-width:thin}
+.registration-steps li{display:flex;align-items:center;gap:10px;flex:1 1 0;min-width:140px;padding:11px 16px;border-left:1px solid var(--v18-line);font-size:12.5px;font-weight:600;color:var(--v18-ink-3);white-space:nowrap;position:relative}
+.registration-steps li:first-child{border-left:0}
+.registration-steps li>span{display:inline-flex;justify-content:center;align-items:center;width:22px;height:22px;flex:none;border-radius:50%;border:1.5px solid var(--v18-line-strong);font-size:11.5px;font-weight:700;color:var(--v18-ink-3);background:#fff;font-variant-numeric:tabular-nums}
+.registration-steps li small{font-size:11px;font-weight:500;color:var(--v18-ink-3)}
+.registration-steps li.active{background:var(--v18-blue-soft);color:var(--v18-blue)}
+.registration-steps li.active>span{border-color:var(--v18-blue);background:var(--v18-blue);color:#fff}
+.registration-steps li.active small{color:var(--v18-blue)}
+.registration-steps li.active::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--v18-blue)}
+.registration-steps li.done{color:var(--v18-ink)}
+.registration-steps li.done>span{border-color:var(--v18-green);background:var(--v18-green-soft);color:var(--v18-green)}
+
+/* ───────── 후속 업무 선택 (.assignment-step) ─────────
+   실제 마크업: section.assignment-step > .section-title(div(h2,p), Button) → CandidateEditor(기존 스타일 유지) × N → p.warning → .candidate-actions(기존) */
+.assignment-step{display:flex;flex-direction:column}
+.assignment-step>.section-title{align-items:flex-start;margin-bottom:16px}
+.assignment-step>.section-title h2{margin:0;font-size:17px;font-weight:700;color:var(--v18-ink)}
+.assignment-step>.section-title p{margin:4px 0 0;font-size:12.5px;line-height:1.6;color:var(--v18-ink-3)}
+.assignment-step .candidate-editor{margin-bottom:10px}
+.assignment-step .candidate-editor:has(input[type=checkbox]:checked){border-color:#b9cbe6;box-shadow:inset 3px 0 0 var(--v18-blue)}
+.assignment-step>.warning{margin:6px 0}
+.assignment-step .candidate-actions{margin-top:10px;position:sticky;bottom:0;z-index:2;border:1px solid var(--v18-line);background:var(--v18-panel-2);box-shadow:0 -6px 18px #15305014}
+.assignment-step .candidate-actions>span{margin-right:auto;font-size:12.5px;font-weight:600;color:var(--v18-ink-2)}
+
+/* ───────── 등록 결과 (.registration-result) ─────────
+   실제 마크업: section.registration-result > svg(Check) + h2(회의 제목) + dl(dt/dd × 3: 회의록 · 후속 업무 · 요구·변경사항) + p.field-note + .button-group(기존)
+   한 개의 단정한 요약 표: dl을 2열(항목 | 결과) 표로 그린다. 큰 카드·큰 숫자 없음. */
+.registration-result{max-width:760px;padding:22px 26px 22px;border:1px solid var(--v18-line);border-top:3px solid var(--v18-green);border-radius:var(--v18-radius);background:var(--v18-panel);display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-areas:"icon title" "table table" "note note" "actions actions";column-gap:12px;row-gap:14px;align-items:start}
+.registration-result>svg{grid-area:icon;width:26px;height:26px;color:var(--v18-green);margin-top:1px}
+.registration-result>h2{grid-area:title;margin:0;font-size:17px;font-weight:700;line-height:1.45;color:var(--v18-ink)}
+.registration-result>dl{grid-area:table;display:grid;grid-template-columns:132px minmax(0,1fr);margin:4px 0 0;border:1px solid var(--v18-line);border-radius:6px;overflow:hidden;background:var(--v18-panel)}
+.registration-result>dl>dt,.registration-result>dl>dd{margin:0;padding:11px 14px;border-top:1px solid #eef2f6;font-size:13px;line-height:1.6}
+.registration-result>dl>dt:first-of-type,.registration-result>dl>dd:first-of-type{border-top:0}
+.registration-result>dl>dt{background:var(--v18-panel-2);font-weight:700;color:var(--v18-ink-3);font-size:12px;letter-spacing:.2px}
+.registration-result>dl>dd{color:var(--v18-ink)}
+.registration-result>.field-note{grid-area:note;margin:0;font-size:11.5px;color:var(--v18-ink-3)}
+.registration-result>.button-group{grid-area:actions;display:flex;justify-content:flex-start;gap:8px;margin-top:2px}
+
+/* ───────── 반응형 ───────── */
+@media(max-width:1200px){
+ .dash-table-head,.dash-project-row{grid-template-columns:minmax(170px,1.3fr) minmax(140px,1.4fr) 110px 84px 76px 104px minmax(110px,1fr) 16px;gap:12px}
+}
+@media(max-width:1100px){
+ .dash-layout{grid-template-columns:minmax(0,1fr) 290px;gap:28px}
+ .dash-table-head,.dash-project-row{grid-template-columns:minmax(170px,1.4fr) 110px 84px 76px 104px minmax(110px,1fr) 16px}
+ .dash-table-head>:nth-child(2),.dash-cell-purpose{display:none} /* 목적 열은 좁은 화면에서 생략(프로젝트를 열면 전체가 보임) */
+}
+@media(max-width:1000px){
+ .dash-layout{grid-template-columns:1fr}
+ .dash-direction{grid-template-columns:1fr;gap:12px}
+}
+@media(max-width:850px){
+ .dash-table{border:0;background:transparent;overflow:visible}
+ .dash-table-head{display:none} /* 카드형에서는 각 셀이 자체 라벨을 가짐 */
+ .dash-project-row{grid-template-columns:1fr 1fr;grid-template-areas:"name name" "stage next" "remaining late" "meeting meeting";gap:8px 14px;margin-bottom:10px;padding:14px 16px;border:1px solid var(--v18-line);border-radius:var(--v18-radius);background:var(--v18-panel)}
+ .dash-project-row>svg{display:none}
+ .dash-cell-name{grid-area:name}
+ .dash-cell-stage{grid-area:stage}
+ .dash-cell-date:nth-of-type(6){grid-area:next}
+ .dash-cell-date:nth-of-type(7){grid-area:meeting}
+ .dash-cell-num:nth-of-type(4){grid-area:remaining}
+ .dash-cell-num:nth-of-type(5){grid-area:late}
+ .dash-cell-num::before,.dash-cell-date::before,.dash-cell-stage::before{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--v18-ink-3)}
+ .dash-cell-stage::before{content:'현재 단계';display:block;margin-bottom:3px}
+ .dash-cell-num:nth-of-type(4)::before{content:'남은 업무'}
+ .dash-cell-num:nth-of-type(5)::before{content:'기한 지남'}
+ .dash-cell-date:nth-of-type(6)::before{content:'다음 기한'}
+ .dash-cell-date:nth-of-type(7)::before{content:'최근 회의록'}
+ .dash-cell-num,.dash-cell-date{flex-direction:column}
+ .dash-item{grid-template-columns:minmax(0,1fr) 16px;grid-template-areas:"reason arrow" "main arrow" "status arrow";gap:6px 10px}
+ .dash-reason{grid-area:reason;justify-self:start}
+ .dash-item-main{grid-area:main}
+ .dash-item .status{grid-area:status;justify-self:start}
+ .dash-item>svg{grid-area:arrow}
+ .registration-result{grid-template-columns:24px minmax(0,1fr);padding:18px}
+ .registration-result>dl{grid-template-columns:1fr}
+ .registration-result>dl>dt{padding-bottom:4px;border-top:1px solid #eef2f6}
+ .registration-result>dl>dd{padding-top:0;border-top:0}
+ .registration-result>dl>dt:first-of-type{border-top:0}
+ .registration-result>.button-group{flex-wrap:wrap}
+ .proposal-meeting-row{grid-template-columns:20px minmax(0,1fr) 16px;grid-template-areas:"icon main arrow" "icon count arrow";gap:6px 12px}
+ .proposal-meeting-row>svg:first-child{grid-area:icon;align-self:start}
+ .proposal-meeting-row>span:nth-child(2){grid-area:main}
+ .proposal-row-count{grid-area:count;flex-direction:row;align-items:center;gap:8px}
+ .proposal-meeting-row>svg:last-child{grid-area:arrow}
+ .assignment-step>.section-title{flex-direction:column;align-items:stretch}
+}
+@media(max-width:540px){
+ .dash-brief{gap:6px}
+ .dash-brief-item{min-height:32px;padding:0 10px;font-size:12px}
+ .dash-project-row{grid-template-columns:1fr;grid-template-areas:"name" "stage" "remaining" "late" "next" "meeting"}
+ .registration-steps li{min-width:124px;padding:10px 12px;font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){
+ .dash-brief-item,.dash-project-row,.dash-item,.dash-shortcuts button,.proposal-meeting-row{transition:none}
+}
