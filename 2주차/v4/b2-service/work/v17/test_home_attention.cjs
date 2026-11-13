@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),esbuild=require('esbuild');
+const built=esbuild.buildSync({entryPoints:[__dirname+'/home_attention.js'],bundle:true,platform:'node',format:'cjs',write:false});
+const mod={exports:{}};new Function('module','exports',built.outputFiles[0].text)(mod,mod.exports);
+const{pendingChanges,orderAttention}=mod.exports;
+const meetings=[{id:'m',project_id:'p',registered_revision:1,title:'회의'}];
+const e=(id,state,date,extra={})=>({id,meeting_id:'m',business_state:state,effective_date:date,review_state:'검토 전',...extra});
+const g=events=>[{key:'k',project_id:'p',title:'납품일',events}];
+assert.equal(pendingChanges(g([e('a','요청','2026-11-01'),e('b','확정','2026-11-02')]),meetings).length,0);
+assert.equal(pendingChanges(g([e('a','보류','2026-11-01'),e('b','철회','2026-11-02')]),meetings).length,0);
+assert.equal(pendingChanges(g([e('a','보류','2026-11-01')]),meetings)[0].reasons[0],'보류 사유 확인');
+for(const patch of [{source_changed:true},{source_deleted:true},{superseded_by_revision:2},{review_state:'제외'},{meeting_id:'unregistered'}])assert.equal(pendingChanges(g([e('a','요청','2026-11-01',patch)]),meetings).length,0);
+const items=[{title:'미정',reasons:['담당자 미정']},{title:'경과',reasons:['기한 경과']},{title:'확인',reasons:['처리 결과 확인']}];
+assert.deepEqual(orderAttention(items).map(i=>i.title),['경과','미정','확인']);assert.equal(items[0].title,'미정');
+console.log('PASS: latest pending changes only, no stale/excluded/withdrawn alerts, immutable attention ordering.');

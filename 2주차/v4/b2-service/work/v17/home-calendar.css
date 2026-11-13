@@ -1,0 +1,104 @@
+/* Agreed home layout only: project rows, PM direction, expanded calendar and private notes. */
+.portfolio-board{background:#fff;border:1px solid #e1e6ed;border-radius:12px;container:none;overflow:visible}
+.portfolio-board .surface-heading{padding:22px 24px 16px}
+.portfolio-board .project-card-grid{display:flex;flex-direction:column;gap:0;padding:0 24px}
+.portfolio-board .project-card{max-width:none;width:100%;padding:20px 0;border:0;border-bottom:1px solid #e1e7ef;border-radius:0;box-shadow:none;background:transparent;gap:0}
+.portfolio-board .project-card:last-child{border-bottom:0}
+.portfolio-board .project-card-top{margin:0 0 6px}
+.portfolio-board .project-card-title{min-height:0;align-items:center;margin:0}
+.portfolio-board .project-card-title h3{font-size:18px;line-height:1.5}
+.portfolio-board .project-card-meta{margin:8px 0 18px;font-size:12px;color:#66778d}
+.portfolio-board .project-card-latest{min-height:0;border-top:1px solid #edf0f4;padding-top:12px;margin-top:16px;display:grid;grid-template-columns:76px minmax(0,1fr);gap:4px 12px}
+.portfolio-board .project-card-latest>div{display:block;grid-row:span 3}
+.portfolio-board .project-card-latest time{display:block;margin-top:4px;font-size:11px}
+.portfolio-board .project-card-latest strong,.portfolio-board .project-card-latest p{margin:0}
+.portfolio-board .project-card-latest strong{font-size:13px}
+.portfolio-board .project-card-latest p{font-size:13px;color:#5b6e86}
+.project-direction{display:grid;grid-template-columns:minmax(130px,.7fr) minmax(0,2fr) auto;gap:16px;align-items:start;padding:24px 26px;border-bottom:1px solid #e1e7ef;background:#f8fafd}
+.project-direction.compact{padding:0;border:0;background:transparent;gap:12px}
+.direction-stage,.direction-goal{min-width:0}
+.project-direction small{display:block;font-size:12px;color:#61738a;margin:0 0 6px}
+.project-direction strong{font-size:16px;line-height:1.6;display:block;color:#223a57;overflow-wrap:anywhere}
+.project-direction.compact strong{font-size:14px}
+.project-direction .direction-stage strong{display:inline-block;padding:3px 9px;background:#eaf2fc;color:#24568d;border-radius:5px}
+.project-direction strong.is-empty{font-size:13px;font-weight:400;color:#7b8796;background:transparent;padding:3px 0}
+.direction-goal time{font-size:12px;display:block;color:#65758c;margin-top:5px}
+.direction-edit{display:flex;gap:5px;align-items:center;border:1px solid #d9e3ee;border-radius:6px;padding:6px 9px;font-size:12px;color:#315e94;background:white;white-space:nowrap}
+.direction-edit:hover{background:#edf4fc}
+.direction-updated{grid-column:1/-1;margin:0;font-size:11px;color:#7b899b}
+.home-flow-summary{display:flex;align-items:center;gap:12px;cursor:pointer;font-size:15px;font-weight:650;list-style:none}
+.home-flow-summary::-webkit-details-marker{display:none}
+.home-flow-summary small{margin-left:auto;color:#758397;font-size:11px;font-weight:400}
+.home-meeting-focus:not([open]){padding-bottom:22px}
+.home-meeting-focus[open]>.home-flow-summary{margin-bottom:20px}
+.modal.modal-project-focus{width:min(580px,calc(100vw - 24px))}
+.focus-project-name{font-size:15px;font-weight:650;color:#294563;margin:0 0 20px}
+.focus-form{display:grid;gap:17px}
+.focus-form label{font-size:13px;color:#3c526d;display:block}
+.focus-form input,.focus-form select{display:block;width:100%;margin-top:7px;padding:10px 12px;border:1px solid #cfd9e6;border-radius:7px;background:#fff;font-size:14px;color:#1e3856}
+.focus-form label small{font-size:11px;color:#7b899b;font-weight:400;margin-left:5px}
+.focus-form .focus-goal-date{max-width:220px}
+.focus-proposals{border-top:1px solid #e0e7ef;margin-top:24px;padding-top:16px}
+.focus-proposals>summary{display:flex;gap:8px;align-items:center;cursor:pointer;list-style:none;font-size:13px;color:#315e94}
+.focus-proposals>summary svg{margin-left:auto}
+.focus-proposals>summary span{background:#eef4fc;padding:2px 6px;border-radius:5px;font-size:11px}
+.focus-proposals .field-note{margin:14px 0;font-size:12px}
+.focus-proposal{padding:14px 0;border-top:1px solid #edf1f6}
+.focus-proposal>small{font-size:11px;color:#6d7d91}
+.focus-proposal>div{display:flex;gap:12px;align-items:start;margin:7px 0}
+.focus-proposal>div b{flex:1;font-size:14px;line-height:1.7}
+.focus-proposal .btn{flex:none}
+.focus-proposal details{font-size:12px;color:#627894;margin-top:10px}
+.focus-proposal blockquote{margin:10px 0;padding:9px 12px;background:#f3f6fa;border-left:3px solid #b9cce5;color:#3e5877;line-height:1.7}
+.focus-proposal .text-link{display:flex;align-items:center;gap:6px;font-size:12px;text-align:left}
+.focus-discard,.calendar-memo-confirm{margin-top:16px;padding:12px;background:#fff6df;border:1px solid #efd69e;border-radius:7px;font-size:13px;color:#705622;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.focus-discard>span,.calendar-memo-confirm>p{width:100%;margin:0 0 5px;line-height:1.6}
+.period-controls{display:flex;align-items:center;gap:2px}
+.period-controls .icon-btn{width:27px;height:29px}
+.period-zoom{display:inline-flex;gap:4px;align-items:center;min-height:29px;padding:3px 7px;border:1px solid #d4dfec;border-radius:6px;background:#f5f8fc;color:#25528a;font-size:12px;white-space:nowrap}
+.period-zoom:hover{background:#eaf1fa}
+.memo-calendar{--memo-date-row:30px;--memo-event-row:19px;--memo-note-row:24px}
+.memo-calendar .period-week{padding-bottom:6px;row-gap:3px}
+.period-memo-label{min-width:0;width:100%;height:22px;border:1px solid #edce82!important;background:#fff0ba!important;color:#705016!important;border-radius:4px;font-size:11px;font-weight:650;padding:1px 2px;display:flex;gap:5px;align-items:center;justify-content:center;overflow:hidden}
+.period-memo-label:hover{background:#ffe394!important}
+.period-memo-label span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.period-memo-label svg{flex:none}
+.legend-memo{background:#ffe49a!important;border:1px solid #dfbc68;border-radius:2px;width:10px;height:10px;display:inline-block}
+.calendar-memo{margin-top:16px;padding-top:14px;border-top:1px solid #dfe6f0}
+.calendar-memo-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#344c6b}
+.calendar-memo-heading>span{display:flex;align-items:center;gap:6px}
+.calendar-memo-heading svg{color:#9c701c}
+.calendar-memo-heading .text-link{font-size:12px;white-space:nowrap}
+.calendar-memo form{margin-top:10px}
+.calendar-memo textarea{display:block;width:100%;min-height:84px;resize:vertical;padding:10px;border:1px solid #d4deeb;border-radius:6px;font-size:13px;line-height:1.65;background:white;color:#213b59}
+.calendar-memo-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
+.calendar-memo-actions .btn{padding:6px 10px;font-size:12px}
+.calendar-memo-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0 0;background:#fff8e4;border:1px solid #f2e1b7;padding:10px;border-radius:6px;color:#654f2a;font-size:13px;line-height:1.75}
+.calendar-memo-empty{font-size:12px;color:#7b8999;margin-top:10px}
+.modal.modal-calendar-zoom{width:min(1080px,calc(100vw - 28px));max-width:none}
+.modal-calendar-zoom .period-calendar{padding:0;margin:0;max-width:none;border:0;background:white}
+.memo-calendar.is-expanded{--memo-date-row:40px;--memo-event-row:27px;--memo-note-row:30px}
+.memo-calendar.is-expanded .period-week{min-height:72px;padding-bottom:10px;border-bottom:1px solid #edf1f6}
+.memo-calendar.is-expanded .period-date{width:34px;height:34px;font-size:14px}
+.design-v20 .memo-calendar.is-expanded .section-title h2{font-size:20px}
+.memo-calendar.is-expanded .period-bar,.memo-calendar.is-expanded .period-more{font-size:12px;line-height:25px;height:26px}
+.memo-calendar.is-expanded .period-memo-label{height:28px;padding:3px 7px;justify-content:flex-start;font-size:12px}
+.memo-calendar.is-expanded .calendar-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px;border-top:1px solid #dde6f0;margin-top:16px;padding-top:16px}
+.memo-calendar.is-expanded .calendar-memo{margin:0;padding:0;border:0}
+.memo-calendar.is-expanded .agenda-heading{margin-top:0}
+.memo-calendar.is-expanded .agenda{max-height:180px}
+@media(max-width:760px){
+ .portfolio-board .surface-heading{padding:16px}
+ .portfolio-board .project-card-grid{padding:0 16px}
+ .portfolio-board .project-card-title h3{font-size:17px}
+ .project-direction,.project-direction.compact{grid-template-columns:minmax(0,1fr) auto;gap:12px}
+ .direction-stage{grid-column:1;grid-row:1}.direction-goal{grid-column:1/-1;grid-row:2}.direction-edit{grid-column:2;grid-row:1}
+ .project-direction{padding:20px}
+ .memo-calendar.is-expanded .calendar-detail-grid{grid-template-columns:1fr;gap:18px}
+ .memo-calendar.is-expanded .calendar-memo{border-top:1px solid #e1e7ef;padding-top:14px}
+ .modal-calendar-zoom .modal-body{padding:16px 12px}
+ .memo-calendar.is-expanded .period-memo-label{padding:2px;font-size:10px;gap:2px}
+}
+
+.period-memo-label .memo-label-short{display:none}
+@media(max-width:600px){.memo-calendar.is-expanded .period-memo-label{justify-content:center}.memo-calendar.is-expanded .period-memo-label svg,.memo-calendar.is-expanded .memo-label-full{display:none}.memo-calendar.is-expanded .memo-label-short{display:inline}}
