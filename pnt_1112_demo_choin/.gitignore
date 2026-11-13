@@ -1,0 +1,47 @@
+# Local environments and dependencies
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+results/
+output/
+tmp/
+.vscode/
+.idea/
+# Model weights and downloads
+models/
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+# Local workspace records, uploads, sessions and caches
+data/
+*.sqlite*
+*.db
+*.db-*
+# Local credentials and machine configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Temporary files and archives
+.history/
+*.log
+*.zip
+*.7z
+*.tmp
+*.partial
+Thumbs.db
+.DS_Store
+
+# Local uploads, backups and excluded working files
+files/
+_to_delete/
+*.bak*
+*.orig
+.fuse_hidden*
