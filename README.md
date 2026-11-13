@@ -9,6 +9,7 @@
 | [1주차/B2-프로젝트](1주차/B2-프로젝트/) | 기존 B2 서비스·AI 모델 코드, 실행 파일, 개발 문서 |
 | [2주차/V2](2주차/V2/) | 기존 B2 회의록·업무 관리 v1.7.2 소스와 실행 파일 |
 | [2주차/V2/CHOIN](2주차/V2/CHOIN/) | CHOIN 작업본 v1.8.0: 일정·간트차트·변경 이력과 Excel 일정 입출력 |
+| [pnt_1112_demo_choin](https://github.com/choi410/B2_pnt_project/tree/choin-demo-1112/pnt_1112_demo_choin) | 11월 12일 CHOIN 시연본 · 회의록·변경 이력과 llama.cpp AI 정리 (전용 브랜치) |
 
 ## 최신 B2 서비스 실행
 
