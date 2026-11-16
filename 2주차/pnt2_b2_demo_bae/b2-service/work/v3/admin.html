@@ -1,0 +1,179 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>사용자·권한 관리 · PNT 회의록 서비스</title><script>try{var p=JSON.parse(localStorage.getItem('pnt-v3-display-preferences')||'{}');document.documentElement.dataset.theme=p&&p.theme==='light'?'light':'dark';document.documentElement.dataset.textSize=p&&['small','normal','large'].includes(p.size)?p.size:'normal'}catch(e){}</script><style>:root{color-scheme:dark;--base:#111e2c;--chrome:#1a2939;--ink:#edf3fb;--muted:#a6b8cf;--line:#34475c;--blue:#b3d0ff;--blueink:#172a43;--soft:#263e58;--amber:#f3cd92;--ambersoft:#3b3328;font:var(--ui-font-size,15px)/1.65 'Segoe UI','Malgun Gothic',sans-serif;color:var(--ink);background:var(--base)}
+:root[data-theme="light"]{color-scheme:light;--base:#f4f7fb;--chrome:#fff;--ink:#172b43;--muted:#52677e;--line:#c8d4e2;--blue:#245da3;--blueink:#fff;--soft:#e8f0fb;--amber:#916009;--ambersoft:#fff0d5}
+:root[data-text-size="small"]{--ui-font-size:14px}:root[data-text-size="large"]{--ui-font-size:18px}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+input,select{background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 11px;max-width:100%;min-width:0}
+h1,h2,h3{margin:0;font-weight:650}p{margin:8px 0 16px}
+.button{display:inline-flex;gap:7px;align-items:center;justify-content:center;background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 13px;font-size:.8667rem;text-decoration:none;white-space:nowrap;color:var(--ink)}
+.button.primary{background:var(--blue);border-color:var(--blue);color:var(--blueink);font-weight:600}.button:hover:not(:disabled){filter:brightness(1.12)}
+.error-box{padding:12px 16px;background:var(--ambersoft);color:var(--amber);font-size:.8667rem;border-radius:5px;margin:14px 0 0}
+.muted{color:var(--muted)}
+.topbar{display:flex;align-items:center;gap:28px;padding:14px 32px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.topbar img{display:block;width:68px;height:auto}.topbar h1{font-size:1.0667rem}.topbar .button{margin-left:auto}
+main{max-width:1180px;margin:0 auto;padding:30px 32px 80px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:26px}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;color:var(--muted);font-size:.9333rem}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--blue);font-weight:600}
+h2{font-size:1.2rem;margin-bottom:6px}h3{font-size:1rem}
+.note{color:var(--muted);font-size:.8667rem;margin:0 0 18px}
+table{width:100%;border-collapse:collapse;font-size:.8667rem}th{text-align:left;font-weight:600;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}td input,td select{width:100%;padding:7px 9px}td select{min-width:104px}td input{min-width:96px}
+td.actions{white-space:nowrap;text-align:right}td.actions .button{margin-left:6px;padding:7px 10px;font-size:.8rem}
+.scroll{overflow-x:auto}.inactive td{color:var(--muted)}
+.panel{background:var(--chrome);border:1px solid var(--line);border-radius:9px;padding:20px 22px;margin-top:26px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-top:14px}
+.grid label{display:grid;gap:5px;font-size:.8rem;color:var(--muted)}.grid input,.grid select{width:100%;color:var(--ink)}
+.row-end{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;align-items:center}
+.matrix td:first-child{width:46%}.matrix td,.matrix th{text-align:center}.matrix td:first-child,.matrix th:first-child{text-align:left}
+.matrix input{width:18px;height:18px;padding:0}
+.project{background:var(--chrome);border:1px solid var(--line);border-radius:9px;padding:18px 22px;margin-bottom:16px}
+.project header{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.project header small{color:var(--muted)}
+.project header label{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:.8667rem;color:var(--muted)}
+.members{display:flex;flex-wrap:wrap;gap:8px 18px;margin:14px 0 4px}.members label{display:flex;gap:7px;align-items:center;font-size:.8667rem}
+.members input{width:16px;height:16px;padding:0}
+.toast{position:fixed;right:24px;top:88px;z-index:20;max-width:420px;padding:12px 16px;border-radius:7px;background:var(--soft);border:1px solid var(--line);font-size:.8667rem}
+.toast.error{background:var(--ambersoft);color:var(--amber);border-color:transparent}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;background:var(--soft);color:var(--blue);font-size:.7333rem;margin-left:6px}
+@media(max-width:700px){.topbar{padding:12px 16px;gap:14px}main{padding:20px 16px 80px}}
+</style></head><body>
+<header class="topbar"><a href="/" aria-label="PNT 홈"><img src="data:image/png;base64,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" alt="PNT"></a><h1>사용자·권한 관리</h1><a class="button" href="/">업무 공간으로</a></header>
+<main>
+ <div class="tabs" role="tablist" id="tabs"></div>
+ <div id="view" role="tabpanel"></div>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<script>
+(function(){
+'use strict';
+var view=document.getElementById('view'),tabs=document.getElementById('tabs'),toastBox=document.getElementById('toast'),toastTimer=0,me=null;
+function el(tag,attrs){
+ var node=document.createElement(tag),i;
+ for(var key in (attrs||{})){var value=attrs[key];
+  if(key==='text')node.textContent=value;
+  else if(key.slice(0,2)==='on')node.addEventListener(key.slice(2),value);
+  else if(value===true)node.setAttribute(key,'');
+  else if(value!==false&&value!=null)node.setAttribute(key,value);}
+ for(i=2;i<arguments.length;i++){var child=arguments[i];if(child==null)continue;node.appendChild(typeof child==='string'?document.createTextNode(child):child)}
+ return node;
+}
+function toast(text,isError){toastBox.textContent=text;toastBox.className='toast'+(isError?' error':'');toastBox.setAttribute('role',isError?'alert':'status');toastBox.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(function(){toastBox.hidden=true},isError?8000:3500)}
+function api(path,method,body){
+ return fetch('/api'+path,{method:method||'GET',credentials:'same-origin',headers:body?{'Content-Type':'application/json','X-B2-Request':'workspace'}:{'X-B2-Request':'workspace'},body:body?JSON.stringify(body):undefined})
+  .then(function(res){return res.json().catch(function(){return {}}).then(function(data){
+   if(res.status===401){location.replace('/login');throw new Error('로그인이 필요합니다.')}
+   if(!res.ok){var d=data&&data.detail;throw new Error(typeof d==='string'?d:'입력값을 확인해 주세요.')}
+   return data})});
+}
+function run(promise,done){promise.then(function(result){if(done)done(result)}).catch(function(error){toast(error.message,true)})}
+function options(select,map,current){Object.keys(map).forEach(function(key){select.appendChild(el('option',{value:key,selected:key===current,text:map[key]}))});return select}
+
+function usersView(){
+ view.textContent='';view.appendChild(el('p',{class:'note',text:'불러오는 중…'}));
+ run(api('/admin/users'),function(data){
+  view.textContent='';
+  view.appendChild(el('h2',{text:'사용자 '+data.items.length+'명'}));
+  view.appendChild(el('p',{class:'note',text:'역할은 저장하는 즉시 적용됩니다. 사용 중지한 계정은 바로 로그아웃되고 다시 로그인할 수 없습니다.'}));
+  var body=el('tbody');
+  data.items.forEach(function(u){
+   var name=el('input',{value:u.name,maxlength:80,'aria-label':u.email+' 이름'}),dept=el('input',{value:u.department,maxlength:80,'aria-label':u.email+' 부서'}),pos=el('input',{value:u.position,maxlength:80,'aria-label':u.email+' 직책'});
+   var level=options(el('select',{'aria-label':u.email+' 역할'}),data.levels,u.level);
+   var active=options(el('select',{'aria-label':u.email+' 상태'}),{'1':'사용 중','0':'사용 중지'},u.active?'1':'0');
+   var passwordRow=el('tr',{hidden:true});
+   var newPassword=el('input',{type:'password',placeholder:'새 비밀번호 (8자 이상)',maxlength:72,autocomplete:'new-password','aria-label':u.email+' 새 비밀번호'});
+   passwordRow.appendChild(el('td',{colspan:4},newPassword));
+   passwordRow.appendChild(el('td',{colspan:3,class:'actions'},
+    el('button',{class:'button',type:'button',text:'취소',onclick:function(){passwordRow.hidden=true;newPassword.value=''}}),
+    el('button',{class:'button primary',type:'button',text:'비밀번호 변경',onclick:function(){
+     if(newPassword.value.length<8){toast('비밀번호는 8자 이상으로 입력해 주세요.',true);return}
+     run(api('/admin/users/'+encodeURIComponent(u.id)+'/password','POST',{password:newPassword.value}),function(){passwordRow.hidden=true;newPassword.value='';toast(u.name+' 님의 비밀번호를 변경했습니다.')})}})));
+   var row=el('tr',{class:u.active?'':'inactive'},
+    el('td',null,name),el('td',null,el('span',{text:u.email}),u.id===data.me?el('span',{class:'tag',text:'나'}):null),el('td',null,dept),el('td',null,pos),el('td',null,level),el('td',null,active),
+    el('td',{class:'actions'},
+     el('button',{class:'button',type:'button',text:'비밀번호',disabled:!data.can_create,title:data.can_create?'':'서비스 키 설정 후 사용할 수 있습니다.',onclick:function(){passwordRow.hidden=false;newPassword.focus()}}),
+     el('button',{class:'button primary',type:'button',text:'저장',onclick:function(){
+      run(api('/admin/users/'+encodeURIComponent(u.id),'PATCH',{name:name.value,department:dept.value,position:pos.value,level:level.value,active:active.value==='1'}),function(){toast(name.value+' 님의 정보를 저장했습니다.');usersView()})}})));
+   body.appendChild(row);body.appendChild(passwordRow);
+  });
+  view.appendChild(el('div',{class:'scroll'},el('table',null,el('thead',null,el('tr',null,el('th',{text:'이름'}),el('th',{text:'이메일'}),el('th',{text:'부서'}),el('th',{text:'직책'}),el('th',{text:'역할'}),el('th',{text:'상태'}),el('th',null))),body)));
+  var panel=el('section',{class:'panel'},el('h3',{text:'사용자 추가'}));
+  if(!data.can_create){
+   panel.appendChild(el('p',{class:'note',text:'SUPABASE_SERVICE_ROLE_KEY 가 설정되지 않아 이 화면에서 계정을 만들 수 없습니다. Supabase 대시보드의 Authentication > Users 에서 계정을 만들면 여기에 담당자로 나타나며, 역할은 위 표에서 바꿀 수 있습니다.'}));
+  }else{
+   var f={email:el('input',{type:'email',maxlength:254,autocomplete:'off'}),name:el('input',{maxlength:80}),department:el('input',{maxlength:80}),position:el('input',{maxlength:80,value:'담당자'}),level:options(el('select'),data.levels,'staff'),password:el('input',{type:'password',maxlength:72,autocomplete:'new-password'})};
+   panel.appendChild(el('div',{class:'grid'},el('label',null,'이메일',f.email),el('label',null,'이름',f.name),el('label',null,'부서',f.department),el('label',null,'직책',f.position),el('label',null,'역할',f.level),el('label',null,'초기 비밀번호 (8자 이상)',f.password)));
+   panel.appendChild(el('div',{class:'row-end'},el('button',{class:'button primary',type:'button',text:'계정 만들기',onclick:function(){
+    if(!f.email.value.trim()||!f.name.value.trim()||f.password.value.length<8){toast('이메일, 이름, 8자 이상의 비밀번호를 입력해 주세요.',true);return}
+    run(api('/admin/users','POST',{email:f.email.value.trim(),name:f.name.value.trim(),department:f.department.value.trim(),position:f.position.value.trim()||'담당자',level:f.level.value,password:f.password.value}),function(created){toast(created.name+' 님의 계정을 만들었습니다.');usersView()})}})));
+  }
+  view.appendChild(panel);
+ });
+}
+
+function permissionsView(){
+ view.textContent='';view.appendChild(el('p',{class:'note',text:'불러오는 중…'}));
+ run(api('/admin/permissions'),function(data){
+  view.textContent='';
+  view.appendChild(el('h2',{text:'역할별 기능'}));
+  view.appendChild(el('p',{class:'note',text:'체크를 바꾸면 바로 저장되고, 해당 역할의 사용자에게 다음 요청부터 적용됩니다. 회의록 검토·확정·삭제는 역할과 별개로 각 프로젝트의 PM이 처리합니다.'}));
+  var levels=Object.keys(data.levels),head=el('tr',null,el('th',{text:'기능'}));
+  levels.forEach(function(level){head.appendChild(el('th',{text:data.levels[level]}))});
+  var body=el('tbody');
+  Object.keys(data.permissions).forEach(function(permission){
+   var row=el('tr',null,el('td',{text:data.permissions[permission]}));
+   levels.forEach(function(level){
+    var locked=data.locked[0]===level&&data.locked[1]===permission;
+    var box=el('input',{type:'checkbox',checked:data.granted[level].indexOf(permission)>=0,disabled:locked,'aria-label':data.levels[level]+' · '+data.permissions[permission],onchange:function(){
+     var wanted=box.checked;box.disabled=true;
+     api('/admin/permissions','PUT',{level:level,permission:permission,allowed:wanted}).then(function(){box.disabled=false;toast('저장했습니다.')}).catch(function(error){box.checked=!wanted;box.disabled=false;toast(error.message,true)})}});
+    row.appendChild(el('td',null,box));
+   });
+   body.appendChild(row);
+  });
+  view.appendChild(el('div',{class:'scroll'},el('table',{class:'matrix'},el('thead',null,head),body)));
+ });
+}
+
+function projectsView(){
+ view.textContent='';view.appendChild(el('p',{class:'note',text:'불러오는 중…'}));
+ run(api('/admin/projects'),function(data){
+  view.textContent='';
+  view.appendChild(el('h2',{text:'프로젝트 참여자'}));
+  view.appendChild(el('p',{class:'note',text:'참여자만 그 프로젝트의 회의록과 변경이력을 볼 수 있고, PM만 검토·확정·삭제를 할 수 있습니다.'}));
+  if(!data.items.length)view.appendChild(el('p',{class:'note',text:'지정할 프로젝트가 없습니다.'}));
+  var names={};data.people.forEach(function(p){names[p.id]=p.name+(p.active?'':' (사용 중지)')});
+  data.items.forEach(function(p){
+   var pm=el('select',{'aria-label':p.name+' PM'});
+   data.people.forEach(function(person){if(person.active||person.id===p.pm)pm.appendChild(el('option',{value:person.id,selected:person.id===p.pm,text:names[person.id]}))});
+   var boxes=[],members=el('div',{class:'members'});
+   data.people.forEach(function(person){
+    var isMember=p.members.indexOf(person.id)>=0;
+    if(!person.active&&!isMember)return;
+    var box=el('input',{type:'checkbox',value:person.id,checked:isMember});boxes.push(box);
+    members.appendChild(el('label',null,box,names[person.id]+' · '+(person.position||'')));
+   });
+   function syncPm(){boxes.forEach(function(box){if(box.value===pm.value){box.checked=true;box.disabled=true}else box.disabled=false})}
+   pm.addEventListener('change',syncPm);syncPm();
+   view.appendChild(el('section',{class:'project'},
+    el('header',null,el('h3',{text:p.name}),el('small',{text:p.id}),el('label',null,'PM',pm)),
+    members,
+    el('div',{class:'row-end'},el('button',{class:'button primary',type:'button',text:'저장',onclick:function(){
+     run(api('/admin/projects/'+encodeURIComponent(p.id)+'/access','PUT',{pm_id:pm.value,members:boxes.filter(function(b){return b.checked}).map(function(b){return b.value})}),function(saved){toast(saved.name+' 참여자를 저장했습니다.');projectsView()})}}))));
+  });
+ });
+}
+
+run(api('/me'),function(result){
+ me=result;var list=[];
+ if(me.can_manage_users)list.push(['사용자',usersView],['역할별 기능',permissionsView]);
+ if(me.can_manage_projects||me.permissions.indexOf('project.manage_any')>=0)list.push(['프로젝트 참여자',projectsView]);
+ if(!list.length){view.appendChild(el('p',{class:'note',text:'이 화면을 사용할 권한이 없습니다. 관리자에게 문의해 주세요.'}));return}
+ list.forEach(function(item,index){
+  var button=el('button',{type:'button',role:'tab','aria-selected':index===0?'true':'false',text:item[0],onclick:function(){
+   Array.prototype.forEach.call(tabs.children,function(other){other.setAttribute('aria-selected',other===button?'true':'false')});item[1]()}});
+  tabs.appendChild(button);
+ });
+ list[0][1]();
+});
+})();
+</script></body></html>

@@ -1,0 +1,53 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>로그인 · PNT 회의록 서비스</title><script>try{var p=JSON.parse(localStorage.getItem('pnt-v3-display-preferences')||'{}');document.documentElement.dataset.theme=p&&p.theme==='light'?'light':'dark';document.documentElement.dataset.textSize=p&&['small','normal','large'].includes(p.size)?p.size:'normal'}catch(e){}</script><style>
+:root{color-scheme:dark;--base:#111e2c;--chrome:#1a2939;--ink:#edf3fb;--muted:#a6b8cf;--line:#34475c;--blue:#b3d0ff;--blueink:#172a43;--soft:#263e58;--amber:#f3cd92;--ambersoft:#3b3328;font:var(--ui-font-size,15px)/1.65 'Segoe UI','Malgun Gothic',sans-serif;color:var(--ink);background:var(--base)}
+:root[data-theme="light"]{color-scheme:light;--base:#f4f7fb;--chrome:#fff;--ink:#172b43;--muted:#52677e;--line:#c8d4e2;--blue:#245da3;--blueink:#fff;--soft:#e8f0fb;--amber:#916009;--ambersoft:#fff0d5}
+:root[data-text-size="small"]{--ui-font-size:14px}:root[data-text-size="large"]{--ui-font-size:18px}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+input,select{background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 11px;max-width:100%;min-width:0}
+h1,h2,h3{margin:0;font-weight:650}p{margin:8px 0 16px}
+.button{display:inline-flex;gap:7px;align-items:center;justify-content:center;background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 13px;font-size:.8667rem;text-decoration:none;white-space:nowrap;color:var(--ink)}
+.button.primary{background:var(--blue);border-color:var(--blue);color:var(--blueink);font-weight:600}.button:hover:not(:disabled){filter:brightness(1.12)}
+.error-box{padding:12px 16px;background:var(--ambersoft);color:var(--amber);font-size:.8667rem;border-radius:5px;margin:14px 0 0}
+.muted{color:var(--muted)}
+.login{max-width:1000px;margin:13vh auto;display:grid;grid-template-columns:1.2fr 1fr;gap:100px;padding:30px}
+.login .brand img{display:block;width:85px;height:auto}.login h1{font-size:2.2rem;line-height:1.4;margin-top:34px}.login p{color:var(--muted);font-size:.9333rem}
+.login h2{font-size:1.2rem}.login form{display:grid;gap:14px;margin-top:22px}.login label{display:grid;gap:6px;font-size:.8667rem;color:var(--muted)}.login input{width:100%;color:var(--ink)}
+.login .button{padding:11px 13px;margin-top:6px}
+@media(max-width:800px){.login{display:block;margin:30px 0;padding:24px}.login h1{font-size:1.9333rem}.login section{margin-top:40px}}
+</style></head><body>
+<main class="login">
+ <div><span class="brand"><img src="data:image/png;base64,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" alt="PNT"></span><h1>회의에서 나온 정보,<br>프로젝트의 흐름으로.</h1><p>회의록 · AI 정리 · 변경이력</p></div>
+ <section aria-labelledby="login-title">
+  <h2 id="login-title">업무 공간에 들어가기</h2>
+  <p>회사 이메일과 비밀번호로 로그인하세요.</p>
+  <form id="form" novalidate>
+   <label>이메일<input id="email" type="email" name="email" autocomplete="username" maxlength="254" required autofocus></label>
+   <label>비밀번호<input id="password" type="password" name="password" autocomplete="current-password" maxlength="128" required></label>
+   <button class="button primary" id="submit" type="submit">로그인</button>
+   <p class="error-box" id="error" role="alert" hidden></p>
+  </form>
+  <p style="margin-top:22px">계정이 없거나 비밀번호를 잊었다면 관리자에게 요청하세요.</p>
+ </section>
+</main>
+<script>
+(function(){
+ var form=document.getElementById('form'),email=document.getElementById('email'),password=document.getElementById('password'),button=document.getElementById('submit'),error=document.getElementById('error');
+ function show(text){error.textContent=text;error.hidden=!text}
+ form.addEventListener('submit',function(event){
+  event.preventDefault();show('');
+  var address=email.value.trim();
+  if(!address||!password.value){show('이메일과 비밀번호를 입력해 주세요.');return}
+  button.disabled=true;button.textContent='확인 중…';
+  fetch('/api/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-B2-Request':'workspace'},body:JSON.stringify({email:address,password:password.value})})
+   .then(function(res){return res.json().catch(function(){return {}}).then(function(data){return {ok:res.ok,data:data}})})
+   .then(function(result){
+    if(result.ok){location.replace('/');return}
+    var detail=result.data&&result.data.detail;
+    show(typeof detail==='string'?detail:'로그인하지 못했습니다. 입력값을 확인해 주세요.');
+    button.disabled=false;button.textContent='로그인';password.value='';password.focus();
+   })
+   .catch(function(){show('서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.');button.disabled=false;button.textContent='로그인'});
+ });
+})();
+</script></body></html>

@@ -1,0 +1,161 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><title>회의록 검색 · PNT 회의록 서비스</title><script>try{var p=JSON.parse(localStorage.getItem('pnt-v3-display-preferences')||'{}');document.documentElement.dataset.theme=p&&p.theme==='light'?'light':'dark';document.documentElement.dataset.textSize=p&&['small','normal','large'].includes(p.size)?p.size:'normal'}catch(e){}</script><style>:root{color-scheme:dark;--base:#111e2c;--chrome:#1a2939;--ink:#edf3fb;--muted:#a6b8cf;--line:#34475c;--blue:#b3d0ff;--blueink:#172a43;--soft:#263e58;--amber:#f3cd92;--ambersoft:#3b3328;font:var(--ui-font-size,15px)/1.65 'Segoe UI','Malgun Gothic',sans-serif;color:var(--ink);background:var(--base)}
+:root[data-theme="light"]{color-scheme:light;--base:#f4f7fb;--chrome:#fff;--ink:#172b43;--muted:#52677e;--line:#c8d4e2;--blue:#245da3;--blueink:#fff;--soft:#e8f0fb;--amber:#916009;--ambersoft:#fff0d5}
+:root[data-text-size="small"]{--ui-font-size:14px}:root[data-text-size="large"]{--ui-font-size:18px}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.45}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+input,select{background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 11px;max-width:100%;min-width:0}
+h1,h2,h3{margin:0;font-weight:650}p{margin:8px 0 16px}
+.button{display:inline-flex;gap:7px;align-items:center;justify-content:center;background:var(--base);border:1px solid var(--line);border-radius:7px;padding:9px 13px;font-size:.8667rem;text-decoration:none;white-space:nowrap;color:var(--ink)}
+.button.primary{background:var(--blue);border-color:var(--blue);color:var(--blueink);font-weight:600}.button:hover:not(:disabled){filter:brightness(1.12)}
+.error-box{padding:12px 16px;background:var(--ambersoft);color:var(--amber);font-size:.8667rem;border-radius:5px;margin:14px 0 0}
+.muted{color:var(--muted)}
+.topbar{display:flex;align-items:center;gap:28px;padding:14px 32px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.topbar img{display:block;width:68px;height:auto}.topbar h1{font-size:1.0667rem}.topbar .button{margin-left:auto}
+main{max-width:1500px;margin:0 auto;padding:26px 32px 80px}
+.bar{display:flex;gap:10px}.bar input{flex:1;font-size:1.0667rem;padding:12px 14px;color:var(--ink)}.bar .button{padding:12px 22px;font-size:.9333rem}
+.options{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:12px;font-size:.8667rem;color:var(--muted)}
+.options label{display:flex;gap:7px;align-items:center}.options select,.options input[type=date]{padding:6px 9px;color:var(--ink);font-size:.8667rem}
+.options input[type=checkbox]{width:16px;height:16px;padding:0}
+.hint{margin:10px 0 0;font-size:.8rem;color:var(--muted)}.hint code{font-family:inherit;background:var(--soft);padding:1px 6px;border-radius:4px;color:var(--ink)}
+.summary{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:26px 0 6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.summary h2{font-size:1.0667rem}.summary small{color:var(--muted);font-size:.8667rem}.summary .button{margin-left:auto}
+.notice{margin:12px 0 0;font-size:.8667rem;color:var(--muted)}.notice.warn{padding:10px 14px;background:var(--ambersoft);color:var(--amber);border-radius:5px}
+.notice button{background:var(--soft);border:0;border-radius:4px;padding:3px 9px;margin-left:6px;color:var(--blue)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:28px;margin-top:8px}.layout.split{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr)}
+.result{padding:18px 0;border-bottom:1px solid var(--line)}.result h3{font-size:1.0667rem;line-height:1.5}
+.result .meta{margin:3px 0 10px;font-size:.8rem;color:var(--muted)}
+.hit{display:flex;gap:12px;width:100%;text-align:left;background:none;border:0;border-radius:6px;padding:7px 9px;font-size:.9333rem;line-height:1.7;color:var(--ink)}
+.hit:hover,.hit[aria-current="true"]{background:var(--soft)}.hit .no{flex:0 0 46px;color:var(--muted);font-size:.7333rem;padding-top:4px;white-space:nowrap}
+.hit .context{display:block;color:var(--muted);font-size:.8rem}
+mark{background:var(--ambersoft);color:var(--amber);font-weight:600;border-radius:3px;padding:0 2px}
+.more{background:none;border:0;color:var(--blue);font-size:.8rem;padding:6px 9px}
+.empty{padding:50px 0;text-align:center;color:var(--muted)}
+.source{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);display:flex;flex-direction:column;background:var(--chrome);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.source header{display:flex;gap:12px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid var(--line)}.source header div{flex:1;min-width:0}
+.source h3{font-size:1rem;line-height:1.5}.source header small{color:var(--muted);font-size:.8rem}
+.source header .button{padding:6px 10px;font-size:.8rem}
+.lines{overflow:auto;padding:10px 0}.line{display:flex;gap:12px;padding:4px 18px;font-size:.9rem;line-height:1.75}
+.line .no{flex:0 0 34px;text-align:right;color:var(--muted);font-size:.7333rem;padding-top:4px;user-select:none}
+.line.match{background:var(--soft)}.line.focus{box-shadow:inset 3px 0 0 var(--blue)}
+@media(max-width:1000px){.layout.split{grid-template-columns:1fr}.source{position:static;max-height:70vh;order:-1}}
+@media(max-width:700px){.topbar{padding:12px 16px;gap:14px}main{padding:18px 16px 80px}.bar{flex-wrap:wrap}}
+</style></head><body>
+<header class="topbar"><a href="/" aria-label="PNT 홈"><img src="data:image/png;base64,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" alt="PNT"></a><h1>회의록 검색</h1><a class="button" href="/">업무 공간으로</a></header>
+<main>
+ <form id="form" role="search">
+  <div class="bar"><input id="q" type="search" maxlength="200" autocomplete="off" autofocus aria-label="검색어" placeholder="찾을 단어를 입력하세요. 예: 코팅 폭 변경"><button class="button primary" type="submit">검색</button></div>
+  <div class="options">
+   <label>프로젝트<select id="project"><option value="">참여 중인 전체 프로젝트</option></select></label>
+   <label>기간<input id="from" type="date" aria-label="시작일"> ~ <input id="to" type="date" aria-label="종료일"></label>
+   <label>정렬<select id="sort"><option value="relevance">관련도순</option><option value="newest">최근 회의순</option><option value="oldest">오래된 회의순</option></select></label>
+   <label><input id="synonyms" type="checkbox" checked>같은 뜻의 단어도 찾기</label>
+  </div>
+  <p class="hint">띄어쓰기와 대소문자는 구분하지 않습니다. 여러 단어를 쓰면 모두 들어 있는 회의록을 찾습니다. <code>"변경 요청"</code>처럼 따옴표로 묶으면 붙어 있는 말만, <code>-보류</code>처럼 빼기를 붙이면 그 단어가 있는 문장을 뺍니다.</p>
+ </form>
+ <div id="status"></div>
+ <div class="layout" id="layout"><section id="results" aria-label="검색 결과"></section></div>
+</main>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var form=$('form'),q=$('q'),project=$('project'),from=$('from'),to=$('to'),sort=$('sort'),synonyms=$('synonyms'),statusBox=$('status'),results=$('results'),layout=$('layout');
+var pane=null,sequence=0,projectsLoaded=false,current=null;
+function el(tag,attrs){
+ var node=document.createElement(tag),i;
+ for(var key in (attrs||{})){var value=attrs[key];
+  if(key==='text')node.textContent=value;
+  else if(key.slice(0,2)==='on')node.addEventListener(key.slice(2),value);
+  else if(value===true)node.setAttribute(key,'');
+  else if(value!==false&&value!=null)node.setAttribute(key,value);}
+ for(i=2;i<arguments.length;i++){var child=arguments[i];if(child==null)continue;node.appendChild(typeof child==='string'?document.createTextNode(child):child)}
+ return node;
+}
+function marked(node,segments){segments.forEach(function(s){node.appendChild(s[1]?el('mark',{text:s[0]}):document.createTextNode(s[0]))});return node}
+function params(){
+ var p=new URLSearchParams();p.set('q',q.value.trim());
+ if(project.value)p.set('project_id',project.value);if(from.value)p.set('date_from',from.value);if(to.value)p.set('date_to',to.value);
+ if(sort.value!=='relevance')p.set('sort',sort.value);if(!synonyms.checked)p.set('synonyms','false');
+ return p;
+}
+function api(path){
+ return fetch(path,{credentials:'same-origin'}).then(function(res){return res.json().catch(function(){return {}}).then(function(data){
+  if(res.status===401){var e=new Error('로그인이 필요합니다.');e.signin=true;throw e}
+  if(!res.ok){var d=data&&data.detail;throw new Error(typeof d==='string'?d:'검색하지 못했습니다. 입력값을 확인해 주세요.')}
+  return data})});
+}
+function fail(error){
+ statusBox.textContent='';results.textContent='';closeSource();
+ if(error.signin){statusBox.appendChild(el('p',{class:'notice warn',role:'alert'},'로그인이 필요합니다. ',el('a',{href:'/',text:'업무 공간에서 로그인'}),'한 뒤 다시 열어 주세요.'));return}
+ statusBox.appendChild(el('p',{class:'notice warn',role:'alert',text:error.message}));
+}
+function fillProjects(list){
+ if(projectsLoaded||!list)return;projectsLoaded=true;var wanted=project.dataset.wanted||'';
+ list.forEach(function(p){project.appendChild(el('option',{value:p.id,text:p.name,selected:p.id===wanted}))});
+}
+function closeSource(){if(pane){pane.remove();pane=null}layout.className='layout';Array.prototype.forEach.call(document.querySelectorAll('.hit[aria-current]'),function(b){b.removeAttribute('aria-current')})}
+function openSource(item,lineId,button){
+ var mine=++sequence;
+ Array.prototype.forEach.call(document.querySelectorAll('.hit[aria-current]'),function(b){b.removeAttribute('aria-current')});
+ if(button)button.setAttribute('aria-current','true');
+ var p=new URLSearchParams();p.set('q',q.value.trim());if(!synonyms.checked)p.set('synonyms','false');
+ api('/api/v3/search/source/'+encodeURIComponent(item.id)+'?'+p.toString()).then(function(source){
+  if(mine!==sequence)return;
+  if(pane)pane.remove();
+  var lines=el('div',{class:'lines'}),target=null;
+  source.lines.forEach(function(line){
+   var hit=source.hit_ids.indexOf(line.id)>=0;
+   var row=el('div',{class:'line'+(hit?' match':'')+(line.id===lineId?' focus':'')},el('span',{class:'no',text:String(line.no)}),marked(el('span'),line.segments));
+   if(line.id===lineId||(!lineId&&hit&&!target))target=row;
+   lines.appendChild(row);
+  });
+  pane=el('aside',{class:'source','aria-label':'회의록 원문'},
+   el('header',null,el('div',null,el('h3',{text:source.title}),el('small',{text:(source.date||'날짜 없음')+' · '+source.project_name+' · 일치 문장 '+source.hit_ids.length+'개'})),
+    source.has_file?el('a',{class:'button',href:'/api/v3/meetings/'+encodeURIComponent(source.id)+'/download',text:'원본 내려받기'}):null,
+    el('button',{class:'button',type:'button',text:'닫기','aria-label':'원문 닫기',onclick:closeSource})),
+   lines);
+  layout.className='layout split';layout.appendChild(pane);
+  if(target)lines.scrollTop=Math.max(0,target.offsetTop-lines.offsetTop-lines.clientHeight/3);
+ }).catch(function(error){if(mine===sequence)fail(error)});
+}
+function render(data){
+ current=data;statusBox.textContent='';results.textContent='';closeSource();fillProjects(data.projects);
+ if(!data.query.terms.length){results.appendChild(el('p',{class:'empty',text:'찾을 단어를 입력하면 회의록 원문에서 그 단어가 적힌 문장을 보여 줍니다.'}));return}
+ var summary=el('div',{class:'summary'},el('h2',{text:'회의록 '+data.total+'건 · 문장 '+data.hits_total+'개'}),el('small',{text:'검색 대상 '+data.searched+'건'}));
+ if(data.total)summary.appendChild(el('a',{class:'button',href:'/api/v3/search/export?'+params().toString(),text:'근거 자료 내보내기 (Word)'}));
+ statusBox.appendChild(summary);
+ var also=data.query.terms.filter(function(t){return t.also.length}).map(function(t){return t.text+' → '+t.also.join(', ')});
+ if(also.length)statusBox.appendChild(el('p',{class:'notice',text:'같은 뜻으로 함께 찾은 단어: '+also.join(' / ')}));
+ if(data.mode==='any'&&data.total)statusBox.appendChild(el('p',{class:'notice warn',text:'입력한 단어가 모두 들어 있는 회의록이 없어, 일부 단어가 들어 있는 회의록을 보여 줍니다.'}));
+ if(data.suggestions.length){
+  var tip=el('p',{class:'notice'},'혹시 이 단어를 찾으셨나요?');
+  data.suggestions.forEach(function(s){tip.appendChild(el('button',{type:'button',text:s.word,onclick:function(){q.value=q.value.replace(s['for'],s.word);run()}}))});
+  statusBox.appendChild(tip);
+ }
+ if(!data.total){results.appendChild(el('p',{class:'empty',text:'일치하는 문장이 없습니다. 단어를 줄이거나 다른 표현으로 찾아 보세요.'}));return}
+ data.items.forEach(function(item){
+  var box=el('article',{class:'result'},marked(el('h3'),item.title_segments),
+   el('p',{class:'meta',text:(item.date||'날짜 없음')+' · '+item.project_name+' · 일치 문장 '+item.hit_count+'개'+(item.missing_terms.length?' · 없는 단어: '+item.missing_terms.join(', '):'')}));
+  item.hits.slice(0,6).forEach(function(hit){
+   var button=el('button',{class:'hit',type:'button',title:'원문에서 보기',onclick:function(){openSource(item,hit.id,button)}},el('span',{class:'no',text:hit.no+'번째 줄'}),marked(el('span'),hit.segments));
+   box.appendChild(button);
+  });
+  if(!item.hits.length)box.appendChild(el('button',{class:'more',type:'button',text:'제목이 일치합니다. 원문 보기',onclick:function(){openSource(item,null,null)}}));
+  else if(item.hit_count>6)box.appendChild(el('button',{class:'more',type:'button',text:'외 '+(item.hit_count-6)+'개 문장 · 원문에서 모두 보기',onclick:function(){openSource(item,null,null)}}));
+  results.appendChild(box);
+ });
+ if(data.total>data.items.length)results.appendChild(el('p',{class:'notice',text:'회의록 '+data.total+'건 중 관련도가 높은 '+data.items.length+'건을 보여 줍니다. 프로젝트나 기간을 좁혀 보세요.'}));
+}
+function run(push){
+ var p=params(),mine=++sequence;
+ if(push!==false)history.replaceState(null,'','/search'+(q.value.trim()?'?'+p.toString():''));
+ api('/api/v3/search?'+p.toString()).then(function(data){if(mine===sequence)render(data)}).catch(function(error){if(mine===sequence)fail(error)});
+}
+form.addEventListener('submit',function(event){event.preventDefault();run()});
+[project,from,to,sort,synonyms].forEach(function(control){control.addEventListener('change',function(){run()})});
+var start=new URLSearchParams(location.search);
+q.value=start.get('q')||'';project.dataset.wanted=start.get('project_id')||'';from.value=start.get('date_from')||'';to.value=start.get('date_to')||'';
+if(start.get('sort'))sort.value=start.get('sort');if(start.get('synonyms')==='false')synonyms.checked=false;
+run(false);
+})();
+</script></body></html>
