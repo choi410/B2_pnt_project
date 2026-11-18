@@ -64,7 +64,7 @@ AI 결과는 원문과 대조하고 수정할 수 있습니다. 예상 시간은
 | `SMTP_HOST` / `SMTP_PORT` | 없음 / `587` | 예: `smtp.naver.com`, `smtp.gmail.com`. 465이면 SSL 접속 |
 | `SMTP_USER` / `SMTP_PASSWORD` | 없음 | 메일 계정과 앱 비밀번호 |
 | `MAIL_FROM` / `MAIL_FROM_NAME` | `SMTP_USER` / `PNT 회의록 서비스` | 보내는 주소와 표시 이름 |
-| `APP_BASE_URL` | `http://127.0.0.1:8773` | 메일 속 링크의 앞부분 |
+| `APP_BASE_URL` | 비움 | 메일 속 링크의 앞부분. 비우면 PM이 접속 중인 주소를 사용. 이 서버가 응답하는 주소(`http://127.0.0.1:8773` 등)가 아니면 무시 |
 | `APPROVAL_EXPIRE_DAYS` | `7` | 링크 유효 기간(일) |
 
 기본값(`console`)에서는 메일 계정 없이 전체 흐름을 확인할 수 있습니다. 보낸 뒤 화면에 표시되는 승인 링크를 열면 됩니다.

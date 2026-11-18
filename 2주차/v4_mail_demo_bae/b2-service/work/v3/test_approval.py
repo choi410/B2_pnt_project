@@ -45,7 +45,7 @@ def test_send_view_and_approve(client,capsys):
     assert listed(c,mid) is None
     assert c.post(f'/api/v3/meetings/{mid}/approval-requests',json={'email':'주소아님'}).status_code==422
     result,token=send(c,mid,name='홍길동',message='확인 부탁드립니다.')
-    assert result['mode']=='console' and result['link'].startswith('http://127.0.0.1:8773/#/approval/')
+    assert result['mode']=='console' and result['link'].startswith('http://testserver/#/approval/')   # the address the PM is using
     printed=capsys.readouterr().out
     assert result['link'] in printed and '홍길동님' in printed
     with w.connect() as db:
@@ -63,6 +63,13 @@ def test_send_view_and_approve(client,capsys):
     assert c.post('/api/demo-login',json={'username':'team1'}).status_code==200
     state=listed(c,mid);assert state['status']=='approved' and state['comment']=='확인했습니다.' and not state['outdated']
     assert [x['status'] for x in c.get(f'/api/v3/meetings/{mid}/approval-requests').json()]==['approved']
+
+def test_link_base_must_be_an_address_this_server_answers_on(client,monkeypatch):
+    c=client;_,mid=meeting(c,'링크 주소 검증')
+    monkeypatch.setenv('APP_BASE_URL','http://localhost:5173')   # copied from another project: ignored
+    assert send(c,mid)[0]['link'].startswith('http://testserver/#/approval/')
+    monkeypatch.setenv('APP_BASE_URL','http://localhost:8773/')
+    assert send(c,mid)[0]['link'].startswith('http://localhost:8773/#/approval/')
 
 def test_resend_reject_and_expiry(client):
     c=client;_,mid=meeting(c,'재발송 검증')

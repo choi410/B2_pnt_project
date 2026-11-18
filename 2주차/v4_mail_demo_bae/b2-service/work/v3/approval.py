@@ -7,7 +7,7 @@ so a later source edit does not change what the customer was shown.
 from datetime import datetime, timedelta
 from html import escape
 import hashlib, json, re, secrets
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from work.v17 import team_config
 from work.v3 import mailer
@@ -36,9 +36,19 @@ def expire_days():
     except ValueError:return 7
 
 
-def link_for(token):
-    base=mailer.setting('APP_BASE_URL') or f'http://127.0.0.1:{team_config.PORT}'
-    return base.rstrip('/')+'/#/approval/'+token
+def link_base(origin=''):
+    """Address the mail link starts with; it must be one this server actually answers on.
+
+    APP_BASE_URL is used only when it is such an address. Otherwise the address the PM is
+    using right now is taken, so a value copied from another project cannot break the link.
+    """
+    for base in (mailer.setting('APP_BASE_URL').rstrip('/'),origin.rstrip('/')):
+        if base in team_config.ORIGINS:return base
+    return f'http://127.0.0.1:{team_config.PORT}'
+
+
+def link_for(token,origin=''):
+    return link_base(origin)+'/#/approval/'+token
 
 
 def effective_status(request,now):
@@ -96,13 +106,13 @@ def build_router(w):
         if m.get('deleted_at') or p.get('deleted_at'):raise HTTPException(410,'지금은 사용할 수 없는 링크입니다. 담당자에게 문의해 주세요.')
         return request,p
     @r.post('/meetings/{mid}/approval-requests',status_code=201)
-    def send(mid,body:SendRequest,actor=Depends(w.user)):
+    def send(mid,body:SendRequest,req:Request,actor=Depends(w.user)):
         email=body.email.strip();name=body.name.strip();message=body.message.strip()
         if not EMAIL.match(email):raise HTTPException(422,'받는 사람 이메일 주소를 확인해 주세요.')
         with w.connect() as c:
             m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor,True)
             if m.get('deleted_at'):raise HTTPException(409,'휴지통에 있는 회의록입니다. 복원한 뒤 보내 주세요.')
-        token=secrets.token_urlsafe(32);link=link_for(token)
+        token=secrets.token_urlsafe(32);link=link_for(token,f"{req.url.scheme}://{req.headers.get('host','')}")
         expires_at=(datetime.fromisoformat(w.now())+timedelta(days=expire_days())).isoformat(timespec='seconds')
         # Send before writing, outside any transaction: a slow or failed send changes nothing.
         try:mailer.send(email,*mail_body(p['name'],m,actor['name'],name,message,link,expires_at))
