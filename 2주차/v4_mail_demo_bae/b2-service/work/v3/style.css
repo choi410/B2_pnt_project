@@ -64,3 +64,20 @@
 .approval-form{border-top:1px solid var(--line);padding-top:14px}.approval-form .actions{display:flex;gap:10px;margin-top:12px}.approval-form .button{min-width:110px;justify-content:center}.button.reject{color:var(--bad);border-color:var(--bad)}
 .approval-result{display:flex;gap:10px;align-items:flex-start;border-radius:8px;padding:12px 14px;background:var(--soft)}.approval-result.approved{background:var(--oksoft);color:var(--ok)}.approval-result.rejected{background:var(--badsoft);color:var(--bad)}.approval-result p{margin:4px 0 0}.approval-result svg{flex-shrink:0;margin-top:3px}
 @media(max-width:640px){.approval-card{padding:20px 16px}}
+
+/* Approval page: meeting minutes in the company form layout (always a white sheet, like the printed form) */
+.approval-pages{border-radius:10px}
+.minutes-doc{max-width:850px;margin:0 auto;background:#fff;color:#1c2733;padding:44px 52px 52px;border:1px solid var(--line);font-family:'Malgun Gothic','Segoe UI',sans-serif;font-size:14.5px;line-height:1.7}
+.minutes-doc header{border-left:6px solid #2f6fd0;padding:2px 0 0 16px;margin-bottom:18px}
+.minutes-doc h1{margin:0;font-size:2.15rem;line-height:1.2;color:#17365d;letter-spacing:.02em}
+.minutes-sub{margin:6px 0 0;padding-bottom:10px;border-bottom:1.5px solid #17365d;color:#2f6fd0;font-size:.8rem;font-weight:700;letter-spacing:.22em;white-space:pre-wrap}
+.minutes-doc table{width:100%;border-collapse:collapse;margin:0 0 18px}
+.minutes-info{border-top:2px solid #17365d;border-bottom:2px solid #17365d}
+.minutes-doc th,.minutes-doc td{border:1px solid #d3dce8;padding:9px 14px;text-align:left;vertical-align:middle}
+.minutes-info tr>*{border-left:0;border-right:0}.minutes-info th+td{border-left:1px solid #d3dce8}.minutes-info td+th{border-left:1px solid #d3dce8}
+.minutes-doc th{background:#e9eff8;color:#17365d;font-weight:700;text-align:center;white-space:nowrap;width:118px}
+.minutes-table thead th{width:auto}.minutes-table{font-size:14px}
+.minutes-doc section{margin-top:14px}
+.minutes-doc h2{margin:0 0 8px;padding:3px 0 5px 12px;border-left:5px solid #2f6fd0;border-bottom:1px solid #c9d6e6;color:#17365d;font-size:1.1rem}
+.minutes-doc p{margin:0 0 2px;overflow-wrap:anywhere}.minutes-doc .minutes-strong{font-weight:700;margin-top:6px}
+@media(max-width:640px){.minutes-doc{padding:26px 18px}.minutes-doc th{width:auto}.minutes-doc h1{font-size:1.7rem}}

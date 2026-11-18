@@ -55,6 +55,7 @@ def test_send_view_and_approve(client,capsys):
     c.cookies.clear()   # the customer has no login
     view=c.get('/api/v3/approvals/'+token).json()
     assert view['status']=='sent' and view['project_name']=='승인 흐름 검증' and any('50 m/min' in x for x in view['lines'])
+    assert view['pages']==0 and c.get(f'/api/v3/approvals/{token}/pages/1').status_code==404   # a text upload has no page images
     assert c.get('/api/v3/approvals/없는토큰').status_code==404
     assert c.post('/api/v3/approvals/'+token,json={'decision':'maybe'}).status_code==422
     assert c.post('/api/v3/approvals/'+token,json={'decision':'approved','comment':'확인했습니다.'}).json()=={'status':'approved'}
@@ -76,6 +77,7 @@ def test_resend_reject_and_expiry(client):
     _,first=send(c,mid);_,second=send(c,mid)
     old=c.get('/api/v3/approvals/'+first).json()
     assert old['status']=='canceled' and 'lines' not in old
+    assert c.get(f'/api/v3/approvals/{first}/pages/1').status_code==410   # a replaced link shows no pages
     assert c.post('/api/v3/approvals/'+first,json={'decision':'approved'}).status_code==410
     assert c.post('/api/v3/approvals/'+second,json={'decision':'rejected','comment':'속도 재확인'}).status_code==200
     assert [x['status'] for x in c.get(f'/api/v3/meetings/{mid}/approval-requests').json()]==['rejected','canceled']

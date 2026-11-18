@@ -6,14 +6,18 @@ so a later source edit does not change what the customer was shown.
 """
 from datetime import datetime, timedelta
 from html import escape
-import hashlib, json, re, secrets
+import hashlib, io, json, re, secrets
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from work.v17 import team_config
 from work.v3 import mailer
+from work.v17.intake_review import PDF_LOCK, preview_pages
 
 KIND='approval_request'
 EMAIL=re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+SHOWN=('sent','approved','rejected')   # states whose link still shows the meeting body
 CLOSED='더 이상 사용할 수 없는 링크입니다. 새로 받은 메일의 링크를 사용해 주세요.'
 
 
@@ -97,6 +101,11 @@ def build_router(w):
     def of_meeting(c,mid):
         rows=c.execute("SELECT payload FROM records WHERE kind=? AND json_extract(payload,'$.meeting_id')=?",(KIND,mid))
         return sorted((json.loads(row[0]) for row in rows),key=lambda x:(x['sent_at'],x.get('sequence',0)),reverse=True)
+    def original_pdf(request,m):
+        # The uploaded file's page images, shown when the mail went out before any web edit,
+        # so the reader sees the meeting minutes in their original layout.
+        path=m.get('pdf') if request.get('original') else None
+        return path if path and Path(path).is_file() else None
     def by_token(c,token):
         row=c.execute("SELECT payload FROM records WHERE kind=? AND json_extract(payload,'$.token_hash')=?",(KIND,token_hash(token))).fetchone()
         if not row:raise HTTPException(404,'유효하지 않은 링크입니다. 회의록이 삭제되었거나 주소가 잘못되었습니다.')
@@ -104,7 +113,7 @@ def build_router(w):
         # A meeting or project in the trash hides the request until it is restored.
         m=w.read(c,'meeting',request['meeting_id']);p=w.read(c,'project',m['project_id'])
         if m.get('deleted_at') or p.get('deleted_at'):raise HTTPException(410,'지금은 사용할 수 없는 링크입니다. 담당자에게 문의해 주세요.')
-        return request,p
+        return request,p,m
     @r.post('/meetings/{mid}/approval-requests',status_code=201)
     def send(mid,body:SendRequest,req:Request,actor=Depends(w.user)):
         email=body.email.strip();name=body.name.strip();message=body.message.strip()
@@ -123,7 +132,7 @@ def build_router(w):
             for old in previous:
                 # A new request replaces the link of any request still waiting.
                 if old['status']=='sent':old['status']='canceled';w.save(c,KIND,old)
-            request={'id':w.uid(),'meeting_id':mid,'project_id':m['project_id'],'token_hash':token_hash(token),'email':email,'name':name,'message':message,'status':'sent','comment':'','requested_by':actor['id'],'sent_at':w.now(),'expires_at':expires_at,'responded_at':None,'sequence':len(previous)+1,'revision':m['revision'],'title':m['title'],'date':m.get('date',''),'lines':[x['text'] for x in m.get('lines',[])]}
+            request={'id':w.uid(),'meeting_id':mid,'project_id':m['project_id'],'token_hash':token_hash(token),'email':email,'name':name,'message':message,'status':'sent','comment':'','requested_by':actor['id'],'sent_at':w.now(),'expires_at':expires_at,'responded_at':None,'sequence':len(previous)+1,'revision':m['revision'],'title':m['title'],'date':m.get('date',''),'lines':[x['text'] for x in m.get('lines',[])],'original':m['revision']==1}
             w.save(c,KIND,request)
         result={'id':request['id'],'status':'sent','email':email,'expires_at':expires_at,'mode':mailer.mode()}
         if mailer.mode()!='smtp':result['link']=link   # nothing was mailed; let the PM open it
@@ -137,18 +146,37 @@ def build_router(w):
     @r.get('/approvals/{token}')
     def view(token):
         with w.connect() as c:
-            request,p=by_token(c,token);status=effective_status(request,w.now())
+            request,p,m=by_token(c,token);status=effective_status(request,w.now())
             requester=next((x['name'] for x in w.all_records(c,'person') if x['id']==request['requested_by']),'')
         result={k:request.get(k) for k in ('title','date','name','sent_at','expires_at','responded_at','comment')}|{'status':status,'project_name':p['name'],'requested_by_name':requester}
         # A replaced or expired link does not show the meeting body.
-        if status in ('sent','approved','rejected'):result.update(message=request['message'],lines=request['lines'])
+        if status in SHOWN:result.update(message=request['message'],lines=request['lines'],pages=preview_pages(original_pdf(request,m)))
         return result
+    @r.get('/approvals/{token}/pages/{page}')
+    def page(token,page:int):
+        with w.connect() as c:
+            request,_,m=by_token(c,token)
+            if effective_status(request,w.now()) not in SHOWN:raise HTTPException(410,CLOSED)
+            path=original_pdf(request,m)
+        if not path:raise HTTPException(404,'원본 미리보기가 없습니다.')
+        import pypdfium2 as pdfium
+        with PDF_LOCK:
+            with pdfium.PdfDocument(path) as doc:
+                if page<1 or page>len(doc):raise HTTPException(404,'페이지를 찾을 수 없습니다.')
+                sheet=doc[page-1]
+                try:
+                    bitmap=sheet.render(scale=min(1.8,2200/max(sheet.get_size())))
+                    try:
+                        picture=bitmap.to_pil();buffer=io.BytesIO();picture.save(buffer,format='PNG');picture.close()
+                    finally:bitmap.close()
+                finally:sheet.close()
+        return Response(buffer.getvalue(),media_type='image/png')
     @r.post('/approvals/{token}')
     def respond(token,body:Decision):
         if body.decision not in ('approved','rejected'):raise HTTPException(422,'승인 또는 반려를 선택해 주세요.')
         with w.connect() as c:
             # The write lock makes two simultaneous clicks resolve to one answer.
-            c.execute('BEGIN IMMEDIATE');request,_=by_token(c,token);status=effective_status(request,w.now())
+            c.execute('BEGIN IMMEDIATE');request,_,_=by_token(c,token);status=effective_status(request,w.now())
             if status in ('approved','rejected'):raise HTTPException(409,'이미 처리된 요청입니다.')
             if status=='expired':raise HTTPException(410,'링크의 유효 기간이 지났습니다. 담당자에게 다시 요청해 주세요.')
             if status!='sent':raise HTTPException(410,CLOSED)
