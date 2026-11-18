@@ -11,6 +11,13 @@
 | [2주차/V2/CHOIN](2주차/V2/CHOIN/) | CHOIN 작업본 v1.8.0: 일정·간트차트·변경 이력과 Excel 일정 입출력 |
 | [2주차/v4](2주차/v4/) | 최신 B2 회의록 서비스: 회의록 분석·변경 이력·근거 기반 질문, 팀원 PC 실행 패키지 |
 | [pnt_1112_demo_choin](https://github.com/choi410/B2_pnt_project/tree/choin-demo-1112/pnt_1112_demo_choin) | 11월 12일 CHOIN 시연본 · 회의록·변경 이력과 llama.cpp AI 정리 (전용 브랜치) |
+| [3주차/pnt_project](3주차/pnt_project/) | 11월 13일 작업본: 회의록 분석·변경 이력·근거 기반 질문과 로컬 AI, 팀원 PC 실행 패키지 |
+
+## 3주차 프로젝트 실행
+
+Python 3.12 64비트를 설치한 뒤 `3주차/pnt_project` 폴더에서 `01_처음한번_설치.cmd`, `02_서비스실행.cmd` 순서로 실행합니다.
+
+접속 주소는 <http://127.0.0.1:8774/>입니다. AI 환경 설치와 모델 다운로드 방법은 [3주차 프로젝트 안내](3주차/pnt_project/README.md)를 확인하세요.
 
 ## v4 실행
 
