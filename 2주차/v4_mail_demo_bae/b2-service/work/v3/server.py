@@ -8,6 +8,7 @@ from work.v3.service import build_router,register_revision
 from work.v3 import question_policy
 from work.v17.questions import build_router as questions_router
 from work.v3.trash import build_router as trash_router
+from work.v3.approval import build_router as approval_router
 
 app = legacy.app
 def retain_routes(router):
@@ -20,6 +21,7 @@ retain_routes(app.router)
 app.include_router(questions_router(legacy,question_policy))
 app.include_router(build_router(legacy))
 app.include_router(trash_router(legacy))
+app.include_router(approval_router(legacy))
 original_lifespan=app.router.lifespan_context
 @asynccontextmanager
 async def lifespan(app):

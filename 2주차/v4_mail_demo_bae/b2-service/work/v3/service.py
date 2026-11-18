@@ -10,6 +10,7 @@ from work.v17.intake import parse_date, parse_text
 from work.v17.documents import ensure_document
 from work.v17.intake_review import active
 from work.v3.analysis_progress import stamp,epoch,estimate_runtime,progress_snapshot,recent_batch
+from work.v3.approval import latest_by_meeting,summary as approval_summary
 
 def norm(text):
     return re.sub(r'[\s·_().\-]', '', text or '').casefold()
@@ -327,6 +328,8 @@ def build_router(w):
             all_meetings=w.all_records(c,'meeting');active_project_ids={p['id'] for p in ordered if not p.get('deleted_at')}
             progress=progress_snapshot([m for m in all_meetings if m['project_id'] in active_project_ids])
             ms=[m for m in all_meetings if m['project_id'] in ids and not m.get('deleted_at')];by={m['id']:m for m in ms}
+            # Latest customer approval request per meeting; a display state only.
+            current=w.now();approvals=latest_by_meeting(x for x in w.all_records(c,'approval_request') if x['meeting_id'] in by)
             es=[]
             for e in w.all_records(c,'change_event'):
                 m=by.get(e['meeting_id'])
@@ -334,7 +337,7 @@ def build_router(w):
                 refs={x['id']:x['text'] for x in m['lines']}
                 quotes=[refs[x] for x in e['evidence'] if x in refs]
                 es.append({**e,'quotes':quotes,'context':change_context(quotes,e['after']),'meeting_title':m['title'],'meeting_date':m.get('date','')})
-            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id'])} for m in ms]
+            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
             archived=[{k:m.get(k) for k in ('id','title','project_id','deleted_at')} for m in w.all_records(c,'meeting') if m['project_id'] in ids and m.get('deleted_at') and actor['id'] in (m['author'],next(p['pm'] for p in ps if p['id']==m['project_id']))]
             return {'user':actor,'people':w.all_records(c,'person'),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'3.0-local'}
     @r.get('/search')

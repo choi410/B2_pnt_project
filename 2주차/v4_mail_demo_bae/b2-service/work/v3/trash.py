@@ -20,7 +20,7 @@ def deletion_plan(rows,kind,item):
     targets={(kind,item['id'])}
     if kind=='project':
         targets.update((k,i) for k,i,d in rows if d.get('project_id')==pid or d.get('chosen_project')==pid)
-    targets.update((k,i) for k,i,d in rows if k in ('import','change_event') and d.get('meeting_id') in mids)
+    targets.update((k,i) for k,i,d in rows if k in ('import','change_event','approval_request') and d.get('meeting_id') in mids)
     # Never orphan a task/report outside the explicitly deleted scope.
     if any((k,i) not in targets and k in ('task','context_draft','report') and any(refers_to(d,mid) for mid in mids) for k,i,d in rows):
         return targets,'연결된 업무 또는 보고서가 있어 영구 삭제할 수 없습니다.'
