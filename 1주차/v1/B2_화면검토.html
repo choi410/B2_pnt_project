@@ -10,7 +10,7 @@
 
 </head>
 <body>
-<iframe id="codex-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="B2 워크스페이스 화면 검토" data-srcdoc="&lt;!doctype html&gt;
+<iframe id="pnt-visualization" sandbox="allow-scripts" referrerpolicy="no-referrer" title="B2 워크스페이스 화면 검토" data-srcdoc="&lt;!doctype html&gt;
 &lt;html lang=&quot;ko&quot; data-visualize-standalone&gt;
 &lt;head&gt;
 &lt;meta charset=&quot;utf-8&quot;&gt;
@@ -624,7 +624,7 @@ small,
   background: var(--secondary);
 }
 
-/* Codex Button size=&quot;compact&quot;; appearance stays with the button variant. */
+/* Button size=&quot;compact&quot;; appearance stays with the button variant. */
 .btn-sm {
   --btn-size: 24px;
   padding-inline: 8px;
@@ -1525,7 +1525,7 @@ svg.lucide {
 html&gt;body{padding:0}&lt;/style&gt;
 &lt;/head&gt;
 &lt;body&gt;
-&lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
+&lt;script type=&quot;application/json&quot; id=&quot;pnt-visualization-widget-state&quot;&gt;__PNT_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
 &lt;script&gt;(() =&gt; {
   const root = document.documentElement;
   const mediaQuery = globalThis.matchMedia(&quot;(prefers-color-scheme: dark)&quot;);
@@ -1537,7 +1537,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   const parse = JSON.parse;
   const encode = TextEncoder.prototype.encode.bind(new TextEncoder());
   const initialStateElement = document.getElementById(
-    &quot;codex-visualization-widget-state&quot;,
+    &quot;pnt-visualization-widget-state&quot;,
   );
   const initialGlobals = parse(initialStateElement?.textContent ?? &quot;{}&quot;);
   initialStateElement?.remove();
@@ -1658,9 +1658,9 @@ html&gt;body{padding:0}&lt;/style&gt;
       );
     }
     state = storedState;
-    globalThis.openai.widgetState = state;
+    globalThis.pntBridge.widgetState = state;
     globalThis.dispatchEvent(
-      new CustomEvent(&quot;openai:set_globals&quot;, {
+      new CustomEvent(&quot;pntBridge:set_globals&quot;, {
         detail: { globals: { widgetState: state } },
       }),
     );
@@ -1680,8 +1680,8 @@ html&gt;body{padding:0}&lt;/style&gt;
   const syncTheme = () =&gt; {
     const theme = mediaQuery.matches ? &quot;dark&quot; : &quot;light&quot;;
     root.dataset.theme = theme;
-    globalThis.openai = {
-      ...globalThis.openai,
+    globalThis.pntBridge = {
+      ...globalThis.pntBridge,
       openExternal,
       sendFollowUpMessage,
       setWidgetState,
@@ -1693,8 +1693,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       stateModelContext: &quot;none&quot;,
     };
     globalThis.dispatchEvent(
-      new CustomEvent(&quot;openai:set_globals&quot;, {
-        detail: { globals: globalThis.openai },
+      new CustomEvent(&quot;pntBridge:set_globals&quot;, {
+        detail: { globals: globalThis.pntBridge },
       }),
     );
   };
@@ -1719,7 +1719,7 @@ html&gt;body{padding:0}&lt;/style&gt;
         hostPort != null ||
         source !== parentWindow ||
         typeof data !== &quot;object&quot; ||
-        data?.type !== &quot;codex-visualization-initialize&quot; ||
+        data?.type !== &quot;pnt-visualization-initialize&quot; ||
         !isArray(ports) ||
         ports.length !== 1
       ) {
@@ -1951,7 +1951,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 @media(max-width:780px){#b2-existing-ui-preview .b2v-app{grid-template-columns:1fr}#b2-existing-ui-preview .b2v-side{padding:14px 17px;gap:13px;display:block;border-right:0}#b2-existing-ui-preview .b2v-nav{display:flex;flex-direction:row;flex-wrap:wrap;margin-top:12px}#b2-existing-ui-preview .b2v-nav button{width:auto;padding:8px 10px}#b2-existing-ui-preview .b2v-project-tree,#b2-existing-ui-preview .b2v-who{display:none}#b2-existing-ui-preview .b2v-top .b2v-in{padding:14px 18px}#b2-existing-ui-preview .b2v-page{padding:22px 17px}#b2-existing-ui-preview .b2v-grid2{grid-template-columns:1fr}#b2-existing-ui-preview .b2v-mgrid{grid-template-columns:1fr}#b2-existing-ui-preview .b2v-meeting-results{display:grid;grid-template-columns:1fr 1fr}#b2-existing-ui-preview .b2v-paper{padding:22px 18px}#b2-existing-ui-preview .b2v-top .b2v-tools{width:auto}#b2-existing-ui-preview .b2v-search input{width:150px}#b2-existing-ui-preview .b2v-doc-heading h2{font-size:22px}}
 &lt;/style&gt;
 &lt;script&gt;
-(()=&gt;{const root=document.getElementById(&#x27;b2-existing-ui-preview&#x27;);let screen=&#x27;home&#x27;;function draw(){root.querySelector(&#x27;#view&#x27;).innerHTML=root.querySelector(screen===&#x27;home&#x27;?&#x27;#b2-original-home&#x27;:&#x27;#b2-original-minutes&#x27;).innerHTML;root.querySelector(&#x27;#ptitle&#x27;).textContent=screen===&#x27;home&#x27;?&#x27;홈&#x27;:&#x27;회의록&#x27;;root.querySelectorAll(&#x27;[data-go]&#x27;).forEach(b=&gt;{if(b.dataset.go===screen)b.setAttribute(&#x27;aria-current&#x27;,&#x27;page&#x27;);else b.removeAttribute(&#x27;aria-current&#x27;)})}const saved=window.openai?.widgetState?.privateContent;if([&#x27;home&#x27;,&#x27;minutes&#x27;].includes(saved?.screen))screen=saved.screen;root.addEventListener(&#x27;click&#x27;,e=&gt;{const b=e.target.closest(&#x27;[data-go]&#x27;);if(b&amp;&amp;[&#x27;home&#x27;,&#x27;minutes&#x27;].includes(b.dataset.go)){screen=b.dataset.go;draw();window.openai?.setWidgetState?.({modelContent:{미리보기화면:screen===&#x27;home&#x27;?&#x27;홈&#x27;:&#x27;회의록&#x27;},privateContent:{screen}})?.catch(()=&gt;{})}});window.addEventListener(&#x27;openai:set_globals&#x27;,e=&gt;{const s=e.detail?.globals?.widgetState?.privateContent?.screen;if([&#x27;home&#x27;,&#x27;minutes&#x27;].includes(s)){screen=s;draw()}});draw()})();
+(()=&gt;{const root=document.getElementById(&#x27;b2-existing-ui-preview&#x27;);let screen=&#x27;home&#x27;;function draw(){root.querySelector(&#x27;#view&#x27;).innerHTML=root.querySelector(screen===&#x27;home&#x27;?&#x27;#b2-original-home&#x27;:&#x27;#b2-original-minutes&#x27;).innerHTML;root.querySelector(&#x27;#ptitle&#x27;).textContent=screen===&#x27;home&#x27;?&#x27;홈&#x27;:&#x27;회의록&#x27;;root.querySelectorAll(&#x27;[data-go]&#x27;).forEach(b=&gt;{if(b.dataset.go===screen)b.setAttribute(&#x27;aria-current&#x27;,&#x27;page&#x27;);else b.removeAttribute(&#x27;aria-current&#x27;)})}const saved=window.pntBridge?.widgetState?.privateContent;if([&#x27;home&#x27;,&#x27;minutes&#x27;].includes(saved?.screen))screen=saved.screen;root.addEventListener(&#x27;click&#x27;,e=&gt;{const b=e.target.closest(&#x27;[data-go]&#x27;);if(b&amp;&amp;[&#x27;home&#x27;,&#x27;minutes&#x27;].includes(b.dataset.go)){screen=b.dataset.go;draw();window.pntBridge?.setWidgetState?.({modelContent:{미리보기화면:screen===&#x27;home&#x27;?&#x27;홈&#x27;:&#x27;회의록&#x27;},privateContent:{screen}})?.catch(()=&gt;{})}});window.addEventListener(&#x27;pntBridge:set_globals&#x27;,e=&gt;{const s=e.detail?.globals?.widgetState?.privateContent?.screen;if([&#x27;home&#x27;,&#x27;minutes&#x27;].includes(s)){screen=s;draw()}});draw()})();
 &lt;/script&gt;
 
 
@@ -1964,7 +1964,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   const { autoUpdate, computePosition, flip, offset, shift, size } =
     window.FloatingUIDOM;
   const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
-  const tooltipId = `codex-visualization-tooltip-${
+  const tooltipId = `pnt-visualization-tooltip-${
     window.crypto?.randomUUID?.() ?? Date.now().toString(36)
   }`;
   const tooltipGap = 5;
@@ -2260,7 +2260,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
 })();
 &lt;/script&gt;
-&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+&lt;script id=&quot;pnt-visualization-tabs&quot;&gt;
 (() =&gt; {
   const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
   const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
@@ -2327,7 +2327,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   }, { once: true });
 })();
 &lt;/script&gt;
-&lt;script id=&quot;codex-visualization-carousel&quot;&gt;
+&lt;script id=&quot;pnt-visualization-carousel&quot;&gt;
   (() =&gt; {
     for (const root of document.querySelectorAll(&quot;.viz-carousel&quot;)) {
       const panels = Array.from(
@@ -2534,7 +2534,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     return;
   }
   document
-    .getElementById(&quot;codex-visualization-lucide&quot;)
+    .getElementById(&quot;pnt-visualization-lucide&quot;)
     ?.addEventListener(&quot;load&quot;, initialize, { once: true });
 })();
 &lt;/script&gt;
@@ -2544,7 +2544,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 "></iframe>
 
 <script>(() => {
-  const frame = document.getElementById("codex-visualization");
+  const frame = document.getElementById("pnt-visualization");
   if (!(frame instanceof HTMLIFrameElement)) {
     return;
   }
@@ -2556,7 +2556,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   let sizeWriteTimeout;
   let lastSize = null;
   let pendingSize = null;
-  const storageKey = `codex:visualization-widget-state-v2:${JSON.stringify([
+  const storageKey = `pnt:visualization-widget-state-v2:${JSON.stringify([
     globalThis.location.pathname,
     globalThis.location.search,
   ])}`;
@@ -2774,7 +2774,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     "load",
     () => {
       frame.contentWindow?.postMessage(
-        { type: "codex-visualization-initialize" },
+        { type: "pnt-visualization-initialize" },
         "*",
         [channel.port2],
       );
@@ -2783,9 +2783,9 @@ html&gt;body{padding:0}&lt;/style&gt;
   );
   // Match the trusted bootstrap element, not the same text in an authored title.
   const frameHtml = srcdoc.replace(
-    '<script type="application/json" id="codex-visualization-widget-state">__CODEX_VISUALIZATION_WIDGET_STATE__<\/script>',
+    '<script type="application/json" id="pnt-visualization-widget-state">__PNT_VISUALIZATION_WIDGET_STATE__<\/script>',
     () =>
-      '<script type="application/json" id="codex-visualization-widget-state">' +
+      '<script type="application/json" id="pnt-visualization-widget-state">' +
       JSON.stringify(initialGlobals).replaceAll("<", "\\u003c") +
       "<\/script>",
   );
