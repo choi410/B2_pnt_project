@@ -71,10 +71,36 @@ def build_router(w):
  def add_members(pid,body:Members,actor=Depends(w.user)):
   with w.connect() as c:
    c.execute('BEGIN IMMEDIATE');p=w.project(c,pid,actor,True)
-   valid={x['id'] for x in w.all_records(c,'person')}
+   valid={x['id'] for x in w.assignable_people(c)}
    if any(x not in valid for x in body.ids):raise HTTPException(422,'등록된 구성원을 선택해 주세요.')
    p['members']=list(dict.fromkeys(p['members']+body.ids));w.save(c,'project',p)
-  return {'ok':True}
+  return {'ok':True,'members':p['members']}
+ def member_impact(c,p,uid):
+  """참여자를 뺄 때 영향: 진행 중인 업무(담당·검토)는 막고, 작성한 회의록 수는 안내만 한다."""
+  tasks=[t for t in w.all_records(c,'task') if t.get('project_id')==p['id'] and uid in (t.get('owner_id'),t.get('reviewer_id'))
+         and t.get('status')!='완료' and not t.get('deleted_at')]
+  meetings=sum(1 for m in w.all_records(c,'meeting') if m.get('project_id')==p['id'] and m.get('author')==uid and not m.get('deleted_at'))
+  person=next((x for x in w.all_records(c,'person') if x['id']==uid),{})
+  return {'id':uid,'name':person.get('name') or uid,'is_pm':p.get('pm')==uid,'open_tasks':len(tasks),
+          'open_task_titles':[t.get('title','') for t in tasks[:3]],'meetings':meetings}
+ @r.get('/projects/{pid}/members/{uid}/impact')
+ def removal_impact(pid,uid,actor=Depends(w.user)):
+  with w.connect() as c:
+   p=w.project(c,pid,actor,True)
+   if uid not in p['members']:raise HTTPException(404,'이 프로젝트의 참여자가 아닙니다.')
+   return member_impact(c,p,uid)
+ @r.delete('/projects/{pid}/members/{uid}')
+ def remove_member(pid,uid,actor=Depends(w.user)):
+  with w.connect() as c:
+   c.execute('BEGIN IMMEDIATE');p=w.project(c,pid,actor,True)
+   if uid not in p['members']:raise HTTPException(404,'이 프로젝트의 참여자가 아닙니다.')
+   impact=member_impact(c,p,uid)
+   if impact['is_pm']:raise HTTPException(409,'프로젝트 PM은 뺄 수 없습니다. PM 교체는 관리자에게 요청해 주세요.')
+   if impact['open_tasks']:raise HTTPException(409,f"{impact['name']}님이 담당·검토 중인 업무가 {impact['open_tasks']}건 있습니다. 업무 담당자를 먼저 바꿔 주세요.")
+   p['members']=[x for x in p['members'] if x!=uid]
+   p.setdefault('lifecycle_events',[]).append({'at':w.now(),'by':actor['id'],'action':'member_remove','member':uid})
+   w.save(c,'project',p)
+  return {'ok':True,'members':p['members']}
  def map_record(d,text):
   result={'matches':{},'pages':[],'source_hash':hashlib.sha256(text.encode()).hexdigest(),'source_text':text}
   p=Path(d.get('pdf') or '-')

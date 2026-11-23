@@ -57,6 +57,9 @@ def test_correct_record_updates_projection_and_keeps_original(client):
 
 def test_edit_permissions_and_source_validation(client):
     c,_=client;p,m,e,_=setup_change(c)
+    # 2026-11-23: 참여자는 검수가 끝나기 전까지만 고칠 수 있다. 검수가 끝난 항목은 PM만.
+    with w.connect() as db:
+        done=w.read(db,'change_event',e['id']);done['review_state']='확인됨';w.save(db,'change_event',done)
     c.post('/api/demo-login',json={'username':'team2'})
     assert c.patch('/api/v3/changes/'+e['id'],json=body(e)).status_code==403
     c.post('/api/demo-login',json={'username':'team1'})

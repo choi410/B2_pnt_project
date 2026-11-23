@@ -14,6 +14,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 from work.v17.documents import ensure_document, task_notification, notify, save_content
 from work.v17.intake_review import active
 from work.v17 import team_config
+from work.v17 import auth_supabase
+from work.v17 import permissions
 
 ROOT=Path(__file__).resolve().parents[2]
 DATA_DIR=Path(os.environ.get('B2_TEAM_DATA_DIR',str(ROOT/'data'/'v6'))).resolve()
@@ -99,7 +101,18 @@ def user(req:Request):
  with connect() as c:
   row=c.execute('SELECT user_id FROM sessions WHERE token=? AND expires>?',(hashlib.sha256(token.encode()).hexdigest(),time.time())).fetchone()
   if not row:raise HTTPException(401,'로그인이 필요합니다.')
-  return read(c,'person',row[0])
+  person=read(c,'person',row[0])
+  if person.get('account_status','active')!='active':raise HTTPException(401,'사용이 중지된 계정입니다.')
+  # 관리자는 설정용 API만 쓴다. 업무 데이터 API는 화면이 숨기는 것과 별개로 여기서 막는다.
+  if permissions.is_admin(person) and not permissions.admin_path_allowed(req.url.path):
+   raise HTTPException(403,'관리자 계정은 설정 화면에서만 사용할 수 있습니다.')
+  return person
+def assignable_people(c):
+ # 참여자·PM·담당자로 새로 지정할 수 있는 사람 (관리자·사용 중지 계정 제외)
+ return [x for x in all_records(c,'person') if permissions.assignable(x)]
+def directory_people(c):
+ # 화면의 이름 표시용. 사용 중지된 사람도 과거 기록의 작성자로 보여야 하므로 관리자만 뺀다.
+ return [x for x in all_records(c,'person') if not permissions.is_admin(x)]
 def project(c,pid,actor,pm=False):
  p=read(c,'project',pid)
  if actor['id'] not in p['members']:raise HTTPException(403,'이 프로젝트에 접근할 수 없습니다.')
@@ -133,6 +146,8 @@ class Login(Strict):username:str=Field(max_length=80);password:str=Field(max_len
 def health():return {'ok':True,'version':'2.0-demo','storage':'SQLite','synthetic_data':True,'demo_mode':DEMO_MODE,'workspace':'b2-pnt-demo','team_size':4,'lan_url':f'http://{team_config.LAN_IP}:{team_config.PORT}/' if team_config.LAN_IP else None}
 @app.get('/api/demo-accounts')
 def accounts():
+ # Supabase 로그인 모드에서는 이름 목록을 공개하지 않는다.
+ if auth_supabase.enabled():return []
  with connect() as c:return all_records(c,'person')
 class DemoLogin(Strict):username:str=Field(max_length=80)
 def issue_session(c,person_id):
@@ -141,12 +156,13 @@ def issue_session(c,person_id):
  res=JSONResponse({'ok':True});res.set_cookie(COOKIE,token,httponly=True,samesite='strict',max_age=43200);return res
 @app.post('/api/demo-login')
 def demo_login(body:DemoLogin):
- if not DEMO_MODE:raise HTTPException(403,'빠른 체험 로그인이 꺼져 있습니다.')
+ if not DEMO_MODE or auth_supabase.enabled():raise HTTPException(403,'빠른 체험 로그인이 꺼져 있습니다.')
  with connect() as c:
   read(c,'person',body.username)
   return issue_session(c,body.username)
 @app.post('/api/login')
 def login(body:Login):
+ if auth_supabase.enabled():raise HTTPException(403,'아이디 로그인(/api/auth/login)을 사용해 주세요.')
  with connect() as c:
   limit=c.execute('SELECT * FROM login_limits WHERE id=?',(body.username,)).fetchone()
   if limit and limit['failures']>=8 and time.time()-limit['last']<60:raise HTTPException(429,'잠시 후 다시 로그인해 주세요.')
@@ -174,7 +190,7 @@ def bootstrap(actor=Depends(user)):
   attention=visible_tokens(sys.modules[__name__],c,actor,ts,ps)
   for t in ts:t['unseen']=attention.get(t['id'],{})
   imports=[{'id':x['id'],'title':x.get('title') or x.get('filename') or '등록 중인 회의록','created_at':x['created_at'],'version':x.get('draft_version',1)} for x in all_records(c,'import') if x['actor_id']==actor['id'] and (not x.get('chosen_project') or x['chosen_project'] in ids) and not x.get('meeting_id') and not x.get('deleted_at')]
-  return {'user':actor,'people':all_records(c,'person'),'projects':ps,'meetings':[{k:v for k,v in m.items() if k not in ('docx','pdf','txt','lines','sections','candidates','revisions','original_source','ai_snapshot','reviewed_bundle')}|{'pending':sum(x['state']=='draft' for x in m['candidates'])} for m in ms],'archived_meetings':archived,'tasks':ts,'imports':imports,'demo_mode':DEMO_MODE,'today':datetime.now(KST).date().isoformat(),'can_create_project':can_create_project(c,actor)}
+  return {'user':actor,'permissions':permissions.summary(actor),'people':directory_people(c),'projects':ps,'meetings':[{k:v for k,v in m.items() if k not in ('docx','pdf','txt','lines','sections','candidates','revisions','original_source','ai_snapshot','reviewed_bundle')}|{'pending':sum(x['state']=='draft' for x in m['candidates'])} for m in ms],'archived_meetings':archived,'tasks':ts,'imports':imports,'demo_mode':DEMO_MODE,'today':datetime.now(KST).date().isoformat(),'can_create_project':can_create_project(c,actor)}
 @app.get('/api/meetings/{mid}')
 def meeting_detail(mid,actor=Depends(user)):
  with connect() as c:
@@ -432,7 +448,8 @@ def start_analysis(mid,actor=Depends(user)):
 def index():return FileResponse(Path(os.environ.get('B2_TEAM_HTML') or str(ROOT/'work'/'v17'/'workspace.html')),media_type='text/html')
 
 def can_create_project(c,actor):
- return actor.get('level')=='leader' or any(p['pm']==actor['id'] for p in all_records(c,'project',include_archived=True))
+ # 계정 역할이 있으면 PM만. 체험 로그인은 기존 규칙을 따른다 (permissions.py 참고).
+ return permissions.can_create_project(actor,any(p['pm']==actor['id'] for p in all_records(c,'project',include_archived=True)))
 
 class ProjectInput(Strict):
  name:str=Field(min_length=2,max_length=120)
@@ -442,14 +459,15 @@ class ProjectInput(Strict):
 @app.post('/api/projects',status_code=201)
 def create_project(body:ProjectInput,actor=Depends(user)):
  with connect() as c:
-  if not can_create_project(c,actor):raise HTTPException(403,'프로젝트 생성 권한이 있는 PM 또는 관리자에게 요청해 주세요.')
+  if not can_create_project(c,actor):raise HTTPException(403,'프로젝트는 PM 계정만 만들 수 있습니다.')
   name=body.name.strip()
   if any(re.sub(r'\s+','',x['name']).casefold()==re.sub(r'\s+','',name).casefold() for x in all_records(c,'project',include_archived=True)):raise HTTPException(409,'같은 이름의 프로젝트가 있습니다. 기존 목록 또는 프로젝트 휴지통을 확인해 주세요.')
   if len(name)<2:raise HTTPException(422,'프로젝트 이름을 두 글자 이상 입력해 주세요.')
-  people={p['id'] for p in all_records(c,'person')}
-  if any(x not in people for x in body.members):raise HTTPException(422,'등록된 참여자를 선택해 주세요.')
+  candidates={p['id']:p for p in assignable_people(c)}
+  if any(x not in candidates for x in body.members):raise HTTPException(422,'등록된 참여자를 선택해 주세요.')
   pm_id=body.pm_id or actor['id']
-  if pm_id not in people:raise HTTPException(422,'등록된 PM을 선택해 주세요.')
+  if pm_id not in candidates:raise HTTPException(422,'등록된 PM을 선택해 주세요.')
+  if not permissions.can_be_project_pm(candidates[pm_id]):raise HTTPException(422,'프로젝트 PM은 PM 계정 중에서 지정해 주세요.')
   pid='P-'+datetime.now(KST).strftime('%y')+'-'+uid()[:6].upper()
   p={'id':pid,'name':name,'pm':pm_id,'members':list(dict.fromkeys([actor['id'],pm_id]+body.members)),'year':datetime.now(KST).year,'created_at':now()}
   save(c,'project',p)

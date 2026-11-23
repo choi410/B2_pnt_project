@@ -1,3 +1,5 @@
 -r requirements.txt
 httpx==0.28.1
 pytest==9.2.0
+# Needed by retrieval scoring and tests; same pin as requirements-ai.txt
+numpy==2.5.4

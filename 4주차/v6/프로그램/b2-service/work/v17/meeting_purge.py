@@ -3,6 +3,7 @@ import json,os
 from pathlib import Path
 from fastapi import APIRouter,Depends,HTTPException
 from pydantic import BaseModel,ConfigDict
+from work.v17 import rag_store
 
 class Purge(BaseModel):
  model_config=ConfigDict(extra='forbid')
@@ -82,13 +83,14 @@ def build_router(w):
      if path.is_file():
       target=root/('.purge-'+token+'-'+str(index));os.replace(path,target);staged.append((path,target))
     for k,i in targets:c.execute('DELETE FROM records WHERE kind=? AND id=?',(k,i))
-    if kind=='meeting' and c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_vectors'").fetchone():
-     c.execute('DELETE FROM rag_vectors WHERE project_id=?',(d['project_id'],))
+    if kind=='meeting':rag_store.SQLiteStore(w).delete_project(d['project_id'],c)
     if staged:w.save(c,'purge_cleanup',{'id':token,'paths':[str(path) for _,path in staged]})
   except Exception as exc:
    for source,target in reversed(staged):os.replace(target,source)
    if isinstance(exc,OSError):raise HTTPException(409,'파일이 사용 중이어서 삭제하지 못했습니다. 원본 문서를 닫고 다시 시도해 주세요.') from exc
    raise
+  # Remote vectors are removed after the local transaction commits.
+  if kind=='meeting':rag_store.forget_project(w,d['project_id'])
   cleanup_files(w)
   return {'ok':True}
  @r.delete('/meetings/{mid}')

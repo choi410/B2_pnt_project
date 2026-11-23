@@ -1,0 +1,2 @@
+# Supabase pgvector 벡터 저장소용. 지금은 requirements.txt에 포함되어 01 설치로 함께 설치됩니다.
+psycopg[binary]>=3.2,<4

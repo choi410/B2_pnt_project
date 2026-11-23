@@ -39,9 +39,10 @@ if ($Mode -eq 'Setup') {
     }
     & $packagePython -c "import sys,struct; assert sys.version_info[:2]==(3,12) and struct.calcsize('P')==8"
     if ($LASTEXITCODE -ne 0) { throw 'This folder needs a fresh Python 3.12 64-bit environment.' }
-    & $packagePython -m pip install --disable-pip-version-check -r (Join-Path $serviceRoot 'requirements.txt') -c (Join-Path $serviceRoot 'requirements-lock.txt')
+    # requirements-dev.txt = requirements.txt + pytest, httpx, numpy (service, Supabase, automated tests)
+    & $packagePython -m pip install --disable-pip-version-check -r (Join-Path $serviceRoot 'requirements-dev.txt') -c (Join-Path $serviceRoot 'requirements-lock.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Installation failed. Check Internet access and retry 01.' }
-    Write-Host 'Setup complete. Run 02. AI preparation: 03, 04, then 05.'
+    Write-Host 'Setup complete (service + test tools). Run 02. AI preparation: 03, 04, then 05.'
     exit 0
 }
 if (-not (Test-Path -LiteralPath $packagePython)) { throw 'Run 01 setup first.' }

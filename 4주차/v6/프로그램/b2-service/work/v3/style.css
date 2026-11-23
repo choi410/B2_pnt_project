@@ -1129,3 +1129,54 @@ button.pf3-h:hover b{color:var(--blue)}
  .home-project-grid{grid-template-columns:minmax(0,1fr);gap:12px}
  .home-project-card{padding:16px 18px}
 }
+
+/* Supabase 아이디 로그인 · 관리자 설정 (2026-11-23) */
+.login-form{display:grid;gap:14px;margin-top:6px}
+.login-form label{display:grid;gap:6px;font-size:0.866667rem;color:var(--muted)}
+.login-form input{width:100%;padding:11px 12px;font-size:1rem;color:var(--ink)}
+.login-form button{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:8px;margin-top:6px}
+.admin-console{max-width:1200px;margin:0 auto;padding:30px max(24px,3vw) 60px}
+.admin-head{display:flex;align-items:center;gap:22px;margin-bottom:26px}
+.admin-head .brand img{width:70px}
+.admin-head h1{font-size:1.6rem;margin:0}
+.admin-head p{margin:2px 0 0}
+.admin-logout{margin-left:auto;display:flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid var(--line);border-radius:8px}
+.admin-logout:hover{background:var(--soft)}
+.admin-console .tabs>button{display:flex;align-items:center;gap:7px}
+.admin-refresh{margin-left:auto;color:var(--muted)}
+.admin-message{padding:11px 14px;border-radius:8px;background:var(--soft);color:var(--ink)!important}
+.admin-panel{background:var(--chrome);border:1px solid var(--line);border-radius:12px;padding:20px 22px;overflow-x:auto}
+.admin-table{width:100%;border-collapse:collapse;font-size:0.933333rem}
+.admin-table th{text-align:left;font-weight:600;color:var(--muted);font-size:0.8rem;padding:10px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.admin-table td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.admin-table td small{display:block;color:var(--muted);font-size:0.766667rem}
+.admin-table tr.inactive td{opacity:.6}
+.admin-table button{padding:7px 12px;border-radius:7px;border:1px solid var(--line);white-space:nowrap}
+.admin-danger{color:var(--amber)}
+.admin-danger:hover{background:var(--ambersoft)}
+.admin-pm{display:flex;gap:8px;align-items:center}
+
+/* 프로젝트 참여자 관리 (2026-11-23) */
+.member-list{list-style:none;margin:8px 0 18px;padding:0;border-top:1px solid var(--line)}
+.member-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line)}
+.member-list small,.member-pick small{display:block;color:var(--muted);font-size:0.766667rem}
+.member-pick small{display:inline;margin-left:6px}
+.member-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:70%}
+.member-confirm small{color:var(--amber)!important}
+.member-add-title{font-size:1rem;margin:6px 0 8px}
+.member-pick{display:grid;gap:8px;border:0;padding:0;margin:12px 0 0}
+.member-pick legend{font-size:0.866667rem;color:var(--muted);margin-bottom:6px;padding:0}
+.member-pick label{display:flex;align-items:center;gap:8px}
+.member-pick input[type=checkbox]{width:auto;padding:0}
+.member-pick>.button{justify-self:start;margin-top:6px}
+
+/* 알림 (2026-11-23) */
+.notice-button{position:relative}
+.notice-badge{position:absolute;top:-4px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--amber);color:var(--blueink);font-size:0.7rem;font-weight:700;line-height:18px;text-align:center}
+.notice-list{list-style:none;margin:0;padding:0;max-height:60vh;overflow-y:auto}
+.notice-list li{border-bottom:1px solid var(--line)}
+.notice-list li button{display:grid;gap:2px;width:100%;padding:11px 6px}
+.notice-list li button:hover{background:var(--soft)}
+.notice-list li.unread span{font-weight:650}
+.notice-list li.unread button{border-left:3px solid var(--blue);padding-left:10px}
+.notice-list small{color:var(--muted);font-size:0.766667rem}

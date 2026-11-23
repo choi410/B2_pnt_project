@@ -28,8 +28,17 @@ v5 데이터를 자동으로 가져오거나 덮어쓰지 않습니다.
 - 적용일과 등록 시각이 같은 납기 기록은 근거 회의일을 함께 비교해 최신 합의 일정을 표시합니다.
 - 회의록 등록·분석·검토, 요구사항 표, 근거 원문, 캘린더, 검수·승인·메일 기능을 유지합니다.
 
-Thinking 모델 교체, 추가 학습, PostgreSQL/pgvector 전환, AWS 배포는 아직 적용하지 않았습니다.
-현재 구현은 Qwen Instruct 모델과 E5 검색을 사용하며, 검색 벡터는 기존 DB에 저장합니다.
+### 통합 v6 · 2026-11-23 (v5_gw_login 기능 이식)
+
+- **Supabase 로그인**: 아이디(app_user_id)·비밀번호 로그인, 관리자·PM·팀원 역할별 권한, 관리자 설정 화면
+- **프로젝트 참여자 관리**: PM이 참여자를 고르고 추가·뺄 수 있음(참여자만 프로젝트를 볼 수 있음)
+- **팀원 검수와 PM 알림**: 참여자도 회의록 검수 가능, 등록·검수 완료 시 PM에게 알림(상단 종 버튼)
+- **벡터DB 선택**: 의미 검색 벡터를 로컬 sqlite 또는 Supabase pgvector에 저장, 회의록 저장 시 자동 재색인
+- **주간보고 작성 탭**: 업무 메모로 주간 업무보고서 초안 작성·Word 저장
+- 위 기능은 `.env` 설정(`B2_AUTH_MODE`, `SUPABASE_*`)을 비워 두면 기존 v6처럼 이름 선택 로그인·로컬 검색으로 동작합니다.
+
+Thinking 모델 교체, 추가 학습, AWS 배포는 아직 적용하지 않았습니다.
+현재 구현은 Qwen Instruct 모델과 E5 검색을 사용합니다. 검색 벡터는 기본적으로 기존 DB에 저장하고, 설정하면 Supabase pgvector를 씁니다.
 
 ## 처음부터 들어 있는 자료
 
@@ -79,6 +88,109 @@ Thinking 모델 교체, 추가 학습, PostgreSQL/pgvector 전환, AWS 배포는
 기본 실행은 다른 프로그램이 사용하는 8080 AI 서버에 자동 연결하지 않고 포함된 로컬 모델 설정을 사용합니다.
 GPU 없는 컴퓨터에서 현재 생성 모델이 동일한 속도로 실행되는 구성은 아닙니다.
 환경 점검 통과는 실제 추론 성공·응답 속도 보장을 뜻하지 않습니다. 각 PC의 GPU 메모리와 실제 질문으로 확인해야 합니다.
+
+## 주간보고 작성 탭 (v5에서 통합)
+
+상단 메뉴 **주간보고**에서 업무 메모로 주간 업무보고서 초안을 만듭니다.
+
+1. 보고 기간을 정하고 업무를 표에 넣습니다. 메모 붙여넣기, Excel에서 복사한 표, 파일(.xlsx·.docx·.txt) 불러오기를 지원합니다.
+2. **회의록 연결 찾기**를 누르면 메모 한 줄마다 관련 회의록 문장·변경 이력·후속 조치 후보를 보여 줍니다.
+   체크한 항목만 초안의 근거가 됩니다. 메모에 없는 이번 주 회의록 항목도 골라 넣을 수 있습니다.
+3. 초안(금주 실적 / 차주 계획 / 조치사항)을 고치고 **Word로 저장**합니다. 줄마다 근거 회의록을 열어 볼 수 있습니다.
+
+- 초안은 **AI 없이 규칙으로** 만듭니다. 본문의 수치·이름·날짜는 메모나 연결한 회의록에 있는 것만 씁니다.
+- 연결 후보는 낱말 대조로 찾습니다. 표현이 많이 다르면 못 찾을 수 있으니 "다른 회의록에서 직접 찾기"를 쓰세요.
+- 초안은 작성자 본인에게만 보이며, 본인이 참여한 프로젝트의 등록된 회의록만 연결됩니다.
+- "AI로 문장 다듬기"는 AI 환경이 준비된 PC에서만 보이는 선택 기능이며, 실제 모델로는 아직 검증하지 않았습니다.
+- 예제로 확인할 때는 기간을 **2026-11-16 ~ 2026-11-20**으로 두세요.
+
+코드는 `프로그램/b2-service/work/v3/`의 `weekly*.py`, `weekly_report.jsx`, `weekly.css`입니다.
+검사: `python -m pytest work/v3/test_weekly_parse.py work/v3/test_weekly_match.py work/v3/test_weekly_compose.py work/v3/test_weekly_api.py -q`
+
+## 벡터DB(Supabase pgvector) 의미 검색 (v5에서 통합)
+
+AI 대화의 의미 검색 벡터를 **기본은 로컬 sqlite**, 설정하면 **Supabase pgvector**에 저장합니다.
+코드는 `프로그램/b2-service/work/v17/rag_store.py`이며, `retrieval.py`의 순위 계산(의미 점수 + 낱말 점수)은 그대로입니다.
+
+1. Supabase 대시보드 → SQL Editor에서 `프로그램/b2-service/supabase_pgvector.sql`을 한 번 실행합니다.
+2. 필요한 psycopg는 `requirements.txt`에 들어 있어 `01_처음한번_설치.cmd`로 설치됩니다. 이미 설치한 PC는 01을 한 번 더 실행합니다.
+3. `프로그램/b2-service/.env`의 아래 두 줄을 채웁니다. 연결 문자열은 Supabase 대시보드 → **Connect** → Session pooler 값입니다.
+   ```
+   B2_VECTOR_STORE=supabase
+   SUPABASE_DB_URL=postgresql://postgres.<프로젝트ID>:<DB비밀번호>@aws-0-<지역>.pooler.supabase.com:5432/postgres
+   ```
+4. 점검: `..\b2-model\.venv\Scripts\python.exe -m work.v17.rag_store --check` → `VECTOR STORE: READY`
+5. 서비스를 다시 실행합니다. 프로젝트별 첫 질문 때 청크가 자동으로 색인됩니다.
+
+- 검색 대상(승인본·기간·권한)은 지금처럼 백엔드가 정하고, DB에는 그 목록(cache_key) 안에서만 유사도를 묻습니다.
+- Supabase에 연결하지 못하면 실행 창에 `[vector-store]` 안내를 띄우고 로컬 sqlite 검색으로 계속 동작합니다.
+- 회의록·프로젝트를 영구 삭제하면 sqlite와 Supabase의 해당 프로젝트 벡터를 함께 지웁니다.
+- **자동 재색인:** 회의록 등록·본문 수정·PM 확정·휴지통 이동·복원, 프로젝트 휴지통 이동·복원 때 해당 프로젝트를 백그라운드에서 다시 색인합니다.
+  검색 본문이나 삭제 상태가 실제로 바뀐 저장만 반영하며, 서버 시작 때도 전체 프로젝트를 한 번 맞춥니다. AI 환경이 없는 PC에서는 건너뜁니다.
+  끄려면 `.env`에 `B2_VECTOR_AUTOSYNC=0`을 넣습니다. 수동 전체 색인: `..\b2-model\.venv\Scripts\python.exe -m work.v17.rag_store --reindex`
+- `SUPABASE_DB_URL`에는 DB 비밀번호가 들어 있으므로 Git·프론트엔드에 넣지 않습니다. (`.env`는 Git 제외 대상)
+- 검사: `python -m pytest work/v17/test_rag_store.py -q`
+
+## Supabase 로그인 (아이디·비밀번호) (v5에서 통합)
+
+`.env`에 아래를 넣으면 이름 선택 로그인 대신 **아이디(employees.app_user_id, 예: team1·admin)와 비밀번호**로 로그인합니다.
+비워 두면 기존 이름 선택 방식 그대로입니다.
+
+```
+B2_AUTH_MODE=supabase
+SUPABASE_URL=https://<프로젝트ID>.supabase.co
+SUPABASE_ANON_KEY=<anon 또는 publishable 키>
+SUPABASE_DB_URL=postgresql://...   (아이디→이메일 조회, 관리자 화면에 사용)
+```
+
+- 먼저 `프로그램/b2-service/supabase_auth_step2.sql`의 [B]·[C]를 실행해야 합니다(employees.app_user_id, RLS).
+- Supabase Auth는 이메일로 비밀번호를 확인하므로, 서버가 아이디로 이메일을 찾아 대신 확인합니다. 이메일은 화면에 나오지 않습니다.
+- 없는 아이디와 틀린 비밀번호는 같은 안내("아이디 또는 비밀번호를 확인해 주세요")를 보여 줍니다.
+- API: `POST /api/auth/login`(user_id·password), `GET /api/auth/me`, `GET /api/auth/config`, 로그아웃은 기존 `POST /api/logout`.
+- 관리자 계정으로 로그인하면 **관리자 설정 화면**(사용자 관리, 프로젝트 PM)으로 바로 이동합니다.
+- 검사: `python -m pytest work/v17/test_auth_supabase.py work/v17/test_permissions.py -q`
+
+### 회의록 검수와 PM 알림 (2026-11-23)
+
+- 회의록 검수(AI가 뽑은 변경 항목 확인·제외·수정)는 **그 프로젝트의 참여자 누구나** 할 수 있습니다.
+- 검수 결과는 PM 확인 없이 **바로 변경이력에 반영**됩니다. 대신 PM에게 알림이 갑니다.
+  - 참여자가 회의록을 등록하면: `회의록 등록 · 제목 (등록자 · AI 분석 후 검수 대기)`
+  - 참여자의 검수로 회의록의 모든 항목이 확인·제외되면: `회의록 검수 완료 · 제목 (검수자 · 확인 N · 제외 M)`
+  - PM 본인이 한 일은 알리지 않고, 같은 회의록의 완료 알림은 한 번만 보냅니다.
+- 검수가 끝난 회의록의 항목을 되돌리거나 고치는 것은 **PM만** 할 수 있습니다. PM이 되돌리면 다시 참여자가 검수할 수 있습니다.
+- 상단의 종 모양 버튼에서 알림을 보고, 누르면 해당 회의록으로 이동합니다.
+- 검사: `python -m pytest work/v3/test_member_review.py work/v3/test_history_edit.py -q`
+
+### 프로젝트 참여자 관리 (PM)
+
+- 참여자만 그 프로젝트의 회의록·변경이력을 볼 수 있습니다.
+- 새 프로젝트를 만들 때 참여자를 고릅니다(처음에는 사용 중인 사람 모두 선택, PM 본인은 항상 포함).
+- 프로젝트 화면의 **참여자** 버튼(그 프로젝트 PM에게만 보임)에서 추가·빼기를 합니다.
+- PM 본인은 뺄 수 없고(PM 교체는 관리자), 진행 중인 업무의 담당자·검토자는 담당을 먼저 바꿔야 뺄 수 있습니다.
+  그 사람이 작성한 회의록은 그대로 남습니다.
+- API: `PATCH /api/projects/{pid}/members`(추가), `GET .../members/{uid}/impact`(영향 확인), `DELETE .../members/{uid}`(빼기)
+
+### 관리자 설정 화면 (work/v17/admin.py, work/v3/admin_console.jsx)
+
+- 사용자 관리: 역할(PM ↔ 팀원) 변경, 계정 사용 중지·다시 사용. 바꾸면 그 사람은 바로 로그아웃되고 다시 로그인할 때 새 권한이 적용됩니다.
+  PM을 맡은 프로젝트가 있는 사람은 프로젝트 PM을 먼저 바꿔야 팀원으로 바꾸거나 중지할 수 있습니다.
+- 프로젝트 PM: 사용 중인 PM 계정으로만 교체할 수 있고, 새 PM은 참여자에 자동 추가됩니다. 회의록·변경이력 내용은 보이지 않습니다.
+- 계정 추가, 비밀번호 변경, 관리자 지정·해제는 Supabase 대시보드에서 합니다.
+- 화면 소스를 고쳤으므로 `npm ci` → `npm run build`로 `workspace.html`을 다시 만들어야 화면에 반영됩니다.
+
+### 계정 역할별 권한 (work/v17/permissions.py)
+
+| 기능 | 관리자 | PM | 팀원 |
+| --- | :-: | :-: | :-: |
+| 설정용 API(`/api/auth/*`, `/api/admin/*`) | ○ | ○(내 정보) | ○(내 정보) |
+| 업무 데이터 API(프로젝트·회의록·변경이력·AI) | ✕ (403) | 참여 프로젝트 | 참여 프로젝트 |
+| 프로젝트 생성 | ✕ | ○ | ✕ |
+| 프로젝트 PM으로 지정될 수 있음 | ✕ | ○ | ✕ |
+| 프로젝트 삭제·복원, 참여자 추가, 변경이력 수정·검토, 단계 지정 | ✕ | 내가 PM인 프로젝트 | ✕ |
+
+- 관리자와 사용 중지 계정은 참여자·담당자 후보에서 빠집니다. 사용 중지되면 이미 로그인한 세션도 바로 막힙니다.
+- 이름 선택(체험) 로그인은 기존 규칙(리더만 생성)을 그대로 따릅니다.
+- 검사: `python -m pytest work/v17/test_permissions.py -q` (fastapi가 설치된 환경에서 실제 API 시나리오까지 확인)
 
 ## 저장 위치와 Git 업로드
 
@@ -144,8 +256,10 @@ npm ci
 npm run build
 npm test
 ..\b2-model\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-..\b2-model\.venv\Scripts\python.exe -m pytest work/v3 -q
+..\b2-model\.venv\Scripts\python.exe -m pytest work/v3 work/v17 -q
 ```
+
+테스트는 `work/conftest.py`가 `.env`를 읽지 않게 하므로 실제 SMTP·Supabase 설정을 쓰지 않습니다.
 
 자동 검사는 임시 데이터 및 통제된 모델 응답을 사용하는 부분을 포함합니다. 실제 모델의 품질·속도 평가와 구분합니다.
 검증 결과는 `검증결과.txt`에 기록합니다.

@@ -598,6 +598,29 @@ class ChangeEdit(Strict):
 
 def build_router(w):
     r=APIRouter(prefix='/api/v3')
+    def review_open(c,m):
+        """이 회의록(현재 리비전)에 아직 확인·제외하지 않은 변경 항목이 있는지."""
+        return any(e['meeting_id']==m['id'] and e.get('source_revision')==m['revision'] and not e.get('superseded_by_revision')
+                   and e.get('review_state') not in ('확인됨','제외') for e in w.all_records(c,'change_event'))
+    def review_allowed(c,item,actor):
+        """검수 권한: 프로젝트 참여자는 검수가 끝나기 전까지, PM은 언제나. 검수가 끝난 뒤 수정은 PM만."""
+        p=w.project(c,item['project_id'],actor)
+        if p.get('pm')==actor['id']:return p
+        if review_open(c,w.read(c,'meeting',item['meeting_id'])):return p
+        raise HTTPException(403,'검수가 끝난 회의록의 변경 항목은 PM만 수정할 수 있습니다.')
+    def notify_pm(c,p,actor,m,key,title):
+        """PM에게 회의록 알림 한 번(같은 key는 다시 보내지 않음). PM 본인이 한 일은 알리지 않는다."""
+        if not p.get('pm') or p['pm']==actor['id'] or p['pm'] not in p['members']:return
+        if any(n.get('event_key')==key and n['recipient']==p['pm'] for n in w.all_records(c,'notification')):return
+        w.save(c,'notification',{'id':w.uid(),'recipient':p['pm'],'actor':actor['id'],'project_id':p['id'],'target_type':'meeting',
+                                 'target_id':m['id'],'title':title,'event_key':key,'created_at':w.now(),'read_at':None})
+    def review_finished(c,p,m,actor):
+        """참여자의 검수로 회의록 검수가 끝났으면 PM에게 결과를 알린다."""
+        if review_open(c,m):return
+        items=[e for e in w.all_records(c,'change_event') if e['meeting_id']==m['id'] and e.get('source_revision')==m['revision'] and not e.get('superseded_by_revision')]
+        ok=sum(e.get('review_state')=='확인됨' for e in items);no=sum(e.get('review_state')=='제외' for e in items)
+        detail=f"확인 {ok} · 제외 {no}"
+        notify_pm(c,p,actor,m,f"meeting:{m['id']}:reviewed:{m['revision']}",f"회의록 검수 완료 · {m['title']} ({actor['name']} · {detail})")
     def queue_fields(m,history):
         from work.v3.fast_ai import VERSION
         return {'analysis_queued_at':stamp(),'analysis_started_at':None,'analysis_finished_at':None,'analysis_loading_seconds':0,'analysis_loading_started_at':None,'analysis_estimate':estimate_runtime(m['source'],history,VERSION)}
@@ -606,7 +629,7 @@ def build_router(w):
         from work.v17.changes import Change,validate_change,archive_record
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');item=w.read(c,'change_event',cid)
-            w.project(c,item['project_id'],actor,True);w.version(item,body.version)
+            review_allowed(c,item,actor);w.version(item,body.version)
             m=w.read(c,'meeting',item['meeting_id']);active(m)
             if item.get('superseded_by_revision') or item.get('review_state')=='제외' or item['source_revision']!=m['revision'] or body.source_revision!=m['revision'] or m.get('analysis_stale'):
                 raise HTTPException(409,'원문 또는 변경 기록이 바뀌었습니다. 최신 변경이력을 다시 열어 주세요.')
@@ -626,7 +649,7 @@ def build_router(w):
         if body.action not in ('\ud655\uc778','\uc81c\uc678','\uac80\ud1a0 \uc804'):raise HTTPException(422,'\ud655\uc778\u00b7\uc81c\uc678\u00b7\uac80\ud1a0 \uc804 \uc911\uc5d0\uc11c \uace8\ub77c \uc8fc\uc138\uc694.')
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');item=w.read(c,'change_event',cid)
-            w.project(c,item['project_id'],actor,True);w.version(item,body.version)
+            p=review_allowed(c,item,actor);w.version(item,body.version)
             m=w.read(c,'meeting',item['meeting_id']);active(m)
             if item.get('superseded_by_revision') or item['source_revision']!=m['revision'] or m.get('analysis_stale'):
                 raise HTTPException(409,'\uc6d0\ubb38 \ub610\ub294 \ubcc0\uacbd \uae30\ub85d\uc774 \ubc14\ub01c\uc5c8\uc2b5\ub2c8\ub2e4. \ucd5c\uc2e0 \ubcc0\uacbd\uc774\ub825\uc744 \ub2e4\uc2dc \uc5f4\uc5b4 \uc8fc\uc138\uc694.')
@@ -641,8 +664,9 @@ def build_router(w):
                 confirm_v3(w,c,item,actor,target,[e for e in others if e.get('review_state')=='\ud655\uc778\ub428'])
             elif body.action=='\uc81c\uc678':item.update(review_state='\uc81c\uc678',confirmed_by=actor['id'],confirmed_at=w.now())
             else:item.update(review_state='\uac80\ud1a0 \uc804',confirmed_by=None,confirmed_at=None)
-            item.update(version=item['version']+1,human_edited=True,updated_at=w.now(),updated_by=actor['id'])
+            item.update(version=item['version']+1,human_edited=True,updated_at=w.now(),updated_by=actor['id'],reviewed_by=actor['id'])
             w.save(c,'change_event',item)
+            review_finished(c,p,m,actor)
         return {**item,'context':change_context(item['quotes'],item['after'])}
     @r.get('/meetings/{mid}/line-boxes')
     def line_boxes(mid,actor=Depends(w.user)):
@@ -774,6 +798,7 @@ def build_router(w):
                     m.update({k:d.get(k) for k in ('docx','pdf','txt','fingerprint','source_type','original_path','filename','preview_finished')})
                     m.update(queue_fields(m,history),registration_batch_id=batch_id,registration_batch_at=batch_at)
                     register_revision(m);w.save(c,'meeting',m);d['meeting_id']=mid;d['preview_finished']=True;w.save(c,'import',d);jobs.append((mid,job,bool(d.get('docx'))));result.append({'id':mid,'duplicate':False})
+                    notify_pm(c,p,actor,m,f"meeting:{mid}:registered",f"회의록 등록 · {m['title']} ({actor['name']} · AI 분석 후 검수 대기)")
                 except HTTPException as exc:errors.append({'id':item.id,'error':str(exc.detail)})
         for mid,job,word in jobs:
             w.POOL.submit(run_analysis,w,mid,job)
@@ -834,7 +859,8 @@ def build_router(w):
                 if exact:e['after_source']=exact
             meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
             archived=[{k:m.get(k) for k in ('id','title','project_id','deleted_at')} for m in w.all_records(c,'meeting') if m['project_id'] in ids and m.get('deleted_at') and actor['id'] in (m['author'],next(p['pm'] for p in ps if p['id']==m['project_id']))]
-            return {'user':actor,'people':w.all_records(c,'person'),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'6.0.0'}
+            from work.v17 import permissions
+            return {'user':actor,'permissions':permissions.summary(actor),'can_create_project':w.can_create_project(c,actor),'people':w.directory_people(c),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'6.0.0'}
     @r.get('/search')
     def search(q:str=Query(default='',max_length=120),project_id:str='',actor=Depends(w.user)):
         terms=[norm(x) for x in q.split() if norm(x)]

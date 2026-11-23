@@ -71,6 +71,15 @@ def chunks(docs):
  return result
 
 
+def passage_text(p):
+ return p['title']+'\n'+p['text']
+
+
+def passage_key(p):
+ # Shared by question-time retrieval and background re-indexing (rag_store).
+ return fingerprint(MODEL_KEY+'\n'+passage_text(p))
+
+
 def embed(texts,prefix):
  global _encoder,_tokenizer
  import torch
@@ -100,29 +109,32 @@ def retrieve(w,project_id,docs,question,limit=6,trace=None,prune_cache=True,quer
  import numpy as np
  passages=chunks(docs)
  if not passages:return []
- texts=[p['title']+'\n'+p['text'] for p in passages]
- keys=[fingerprint(MODEL_KEY+'\n'+t) for t in texts]
- with w.connect() as c:
-  c.execute('CREATE TABLE IF NOT EXISTS rag_vectors(project_id TEXT,cache_key TEXT,vector TEXT,PRIMARY KEY(project_id,cache_key))')
-  cached={r[0]:json.loads(r[1]) for r in c.execute('SELECT cache_key,vector FROM rag_vectors WHERE project_id=?',(project_id,))}
- missing=list(dict.fromkeys(k for k in keys if k not in cached));text_by_key=dict(zip(keys,texts))
- if missing:
-  values=embed([text_by_key[k] for k in missing],'passage: ')
-  cached.update(zip(missing,values))
-  with w.connect() as c:
-   c.executemany('INSERT OR REPLACE INTO rag_vectors VALUES(?,?,?)',[(project_id,k,json.dumps(cached[k])) for k in missing])
- # Remove stale index entries for this project. Every query constructs its eligible
- # corpus anew; old/deleted/draft text is never eligible even before this cleanup.
- if prune_cache:
-  with w.connect() as c:
-   stale=set(cached)-set(keys)
-   c.executemany('DELETE FROM rag_vectors WHERE project_id=? AND cache_key=?',[(project_id,k) for k in stale])
+ from work.v17 import rag_store
+ texts=[passage_text(p) for p in passages]
+ keys=[passage_key(p) for p in passages]
+ text_by_key=dict(zip(keys,texts));passage_by_key=dict(zip(keys,passages))
  words=(query_plan or {}).get('search_terms')
  if words is None:words=topic_terms(question)
  # Embed the subject vocabulary rather than conversational question endings.
  # Preserve the user's full request in generation, never overwrite the source.
  search_text=' '.join(' / '.join(t) if isinstance(t,(list,tuple)) else t for t in words) or question
- query=np.asarray(embed([search_text],'query: ')[0]);matrix=np.asarray([cached[k] for k in keys]);scores=matrix@query
+ query_vector=[]
+ def vector_scores(store):
+  # The vector store (sqlite or Supabase pgvector) only scores keys of the
+  # corpus built for this request; stored text never widens the eligible set.
+  existing=store.existing(project_id,keys)
+  missing=list(dict.fromkeys(k for k in keys if k not in existing))
+  if missing:
+   values=embed([text_by_key[k] for k in missing],'passage: ')
+   store.upsert(project_id,[{'cache_key':k,'vector':v,'passage':passage_by_key[k]} for k,v in zip(missing,values)])
+  # Remove stale index entries for this project. Every query constructs its eligible
+  # corpus anew; old/deleted/draft text is never eligible even before this cleanup.
+  if prune_cache:store.prune(project_id,keys)
+  if not query_vector:query_vector.extend(embed([search_text],'query: ')[0])
+  return store.name,store.scores(project_id,keys,query_vector)
+ backend,by_key=rag_store.run(w,vector_scores)
+ floor=min(by_key.values(),default=0.0)
+ scores=np.asarray([by_key.get(k,floor) for k in keys])
  for i,p in enumerate(passages):
   # Match the body, not a title repeated before every window. Headings can be
   # relevant to author/attendee questions, but never substitute for body evidence.
@@ -152,7 +164,7 @@ def retrieve(w,project_id,docs,question,limit=6,trace=None,prune_cache=True,quer
  chosen.sort(key=lambda p:(p['date'],p['meeting_id'],p['line_ids'][0]))
  if trace:
   fields=lambda p:{k:p[k] for k in ('meeting_id','revision','date','line_ids','score','_rank')}
-  trace('retrieval',project_id=project_id,candidate_count=len(passages),relative_floor=round(best-.06,5),limit=limit,
+  trace('retrieval',project_id=project_id,vector_store=backend,candidate_count=len(passages),relative_floor=round(best-.06,5),limit=limit,
         candidates=[fields(p) for p in candidates[:24]],chosen=[fields(p) for p in chosen])
  # One citation per meeting avoids identical titles pointing to a different
  # window of the same document. Keep the actual selected text and line IDs.

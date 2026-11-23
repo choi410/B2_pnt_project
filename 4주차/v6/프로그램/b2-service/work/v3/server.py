@@ -12,8 +12,14 @@ from work.v3.requirements import build_router as requirements_router
 from work.v3.conversations import build_router as conversations_router
 from work.v3.approval import build_router as approval_router
 from work.v3.change_category import build_router as category_router
+from work.v3.weekly import build_router as weekly_router
+from work.v17.auth_supabase import build_router as auth_router
+from work.v17.admin import build_router as admin_router
 
 app = legacy.app
+# 회의록·프로젝트가 저장되면 해당 프로젝트의 검색 벡터를 백그라운드에서 다시 맞춘다 (B2_VECTOR_AUTOSYNC=0 으로 끔).
+from work.v17 import rag_store
+rag_store.install(legacy)
 def retain_routes(router):
     # FastAPI can retain included routers instead of flattening their routes.
     for route in router.routes:
@@ -29,6 +35,9 @@ app.include_router(trash_router(legacy))
 app.include_router(requirements_router(legacy))
 app.include_router(approval_router(legacy))
 app.include_router(category_router(legacy))
+app.include_router(weekly_router(legacy))
+app.include_router(auth_router(legacy))
+app.include_router(admin_router(legacy))
 app.version='6.0.0'
 
 @app.get('/api/package-info')
@@ -44,6 +53,7 @@ async def lifespan(app):
             for m in legacy.all_records(c,'meeting'):
                 if m.get('v3_job') and not m.get('deleted_at') and (m.get('registered_revision')!=m['revision'] or not any(r['number']==m['revision'] for r in m.get('revisions',[]))):
                     register_revision(m);legacy.save(c,'meeting',m)
+        rag_store.sync_all(legacy)
         yield
 app.router.lifespan_context=lifespan
 

@@ -29,6 +29,8 @@ import {
   Sparkles,
   History,
   Route,
+  Users,
+  Bell,
 } from "lucide-react";
 import logo from "./assets/pnt-logo.png";
 import { QuestionPanel } from "./conversation_panel";
@@ -39,6 +41,8 @@ import { categoryLabel, groupKey, HISTORY_STATES, matchesHistoryState, usedCateg
 import { updateWorkspace } from "./workspace_state.mjs";
 import workflow from "./team_ui/project_flow";
 import createApproval from "./team_ui/approval";
+import { AdminConsole } from "./admin_console";
+import { createWeeklyReport } from "./weekly_report";
 var isoDay = (a) => a.toISOString().slice(0, 10);
 var eventsOn = (a, e) => a.filter((t) => t.start <= e && t.end >= e);
 function calendarWeeks(a, e) {
@@ -1398,11 +1402,18 @@ function ChangeValue({ event: a, compact: e = !1 }) {
     </React.Fragment>
   );
 }
+// 주간보고 탭은 React와 api를 받아 만든다(weekly_report.jsx 머리말 참고).
+var WeeklyReport = createWeeklyReport(React, { api });
 function App() {
   let [questionOpen, setQuestionOpen] = (0, React.useState)(!1),
     [transfer, setTransfer] = (0, React.useState)(null),
     [D, setWorkspace] = (0, React.useState)(null),
     [accounts, setAccounts] = (0, React.useState)([]),
+    // Supabase 로그인 모드: 아이디(app_user_id)·비밀번호 로그인, 관리자는 설정 화면으로 이동
+    [authMode, setAuthMode] = (0, React.useState)("demo"),
+    [adminUser, setAdminUser] = (0, React.useState)(null),
+    [loginId, setLoginId] = (0, React.useState)(""),
+    [loginPw, setLoginPw] = (0, React.useState)(""),
     [page, setPage] = (0, React.useState)("home"),
     [pid, setPid] = (0, React.useState)(""),
     [meeting, setMeeting] = (0, React.useState)(null),
@@ -1441,6 +1452,21 @@ function App() {
     Dg = (0, React.useRef)(queue);
   Dg.current = queue;
   const setD = React.useCallback((update) => setWorkspace((current) => updateWorkspace(current, update)), []);
+  // 알림(회의록 등록·검수 완료 등): 로그인한 동안 15초마다 새로 받는다.
+  const [notices, setNotices] = React.useState({ items: [], unread: 0 });
+  const loadNotices = React.useCallback(
+    () =>
+      api("/notifications")
+        .then(setNotices)
+        .catch(() => {}),
+    [],
+  );
+  React.useEffect(() => {
+    if (!D?.user?.id) return;
+    loadNotices();
+    const timer = setInterval(loadNotices, 15000);
+    return () => clearInterval(timer);
+  }, [D?.user?.id, loadNotices]);
   let he = async () => {
     let c = await api("/v3/workspace");
     return (setD(c), c);
@@ -1456,12 +1482,29 @@ function App() {
     }
   }
   ((0, React.useEffect)(() => {
-    (api("/demo-accounts")
-      .then(setAccounts)
-      .catch((c) => setToast(c.message)),
+    (async () => {
+      let cfg = { mode: "demo" };
+      try {
+        cfg = await api("/auth/config");
+      } catch (c) {}
+      setAuthMode(cfg.mode);
+      if (cfg.mode === "supabase") {
+        // 이미 로그인한 세션이면 역할을 확인해 관리자는 설정 화면으로 보낸다.
+        try {
+          let me = await api("/auth/me");
+          if (me.role === "admin") return setAdminUser(me);
+        } catch (c) {
+          c.status !== 401 && setToast(c.message);
+          return;
+        }
+      } else
+        api("/demo-accounts")
+          .then(setAccounts)
+          .catch((c) => setToast(c.message));
       he().catch((c) => {
         c.status !== 401 && setToast(c.message);
-      }));
+      });
+    })();
   }, []),
     (0, React.useEffect)(() => {
       if (!D) return;
@@ -1751,6 +1794,20 @@ function App() {
     meeting &&
     (meeting.author === D?.user.id ||
       D?.projects.find((c) => c.id === meeting.project_id)?.pm === D?.user.id);
+  if (adminUser)
+    return (
+      <AdminConsole
+        api={api}
+        user={adminUser}
+        logo={logo}
+        onLogout={async () => {
+          try {
+            await api("/logout", "POST");
+          } catch (c) {}
+          (setAdminUser(null), setLoginPw(""));
+        }}
+      />
+    );
   return D ? (
     <React.Fragment>
       <header className="topbar">
@@ -1766,6 +1823,7 @@ function App() {
             ["home", "홈"],
             ["minutes", "회의록"],
             ["changes", "변경이력"],
+            ["weekly", "주간보고"],
           ].map(([c, y]) => (
             <button
               key={c}
@@ -1798,6 +1856,19 @@ function App() {
         >
           {"AI"}
         </Button>
+        <button
+          className="icon-button notice-button"
+          aria-label={"알림 " + notices.unread + "건"}
+          title="알림"
+          onClick={() => (loadNotices(), setModal({ type: "notices" }))}
+        >
+          <Bell size={18} />
+          {notices.unread > 0 && (
+            <span className="notice-badge">
+              {notices.unread > 99 ? "99+" : notices.unread}
+            </span>
+          )}
+        </button>
         <button
           className="account"
           onClick={() =>
@@ -3112,6 +3183,9 @@ function App() {
                         (x) => x.id === meeting.project_id,
                       ),
                       _PM = _P?.pm === D.user.id,
+                      // 2026-11-23: 프로젝트 참여자도 검수가 끝나기 전까지 확인·제외·수정할 수 있다(끝난 뒤에는 PM만).
+                      _open = _ev.some((x) => x.review_state !== "확인됨" && x.review_state !== "제외"),
+                      _CR = _PM || ((_P?.members || []).includes(D.user.id) && _open),
                       _busy = working || at(meeting),
                       _send = (e, a, l) =>
                         Ca(async () => {
@@ -3258,7 +3332,7 @@ function App() {
                               <small>{_CN[_cat(e)][1]}</small>
                             </div>
                             <span className="rv-grouptools">
-                              {_PM && wait.length ? (
+                              {_CR && wait.length ? (
                                 <button
                                   type="button"
                                   className="rv-btn rv-yes"
@@ -3279,7 +3353,7 @@ function App() {
                                 const oks = g.filter(
                                   (x) => x.review_state === "확인됨",
                                 );
-                                return _PM && oks.length ? (
+                                return _CR && oks.length ? (
                                   <button
                                     type="button"
                                     className="rv-btn rv-allundo"
@@ -3380,7 +3454,7 @@ function App() {
                             "항목을 누르면 왼쪽 원문에서 근거 문장이 형광펜으로 표시됩니다."}
                         </p>
                         {(() => {
-                          if (!_PM || at(meeting) || !_ev.length) return null;
+                          if (!_CR || at(meeting) || !_ev.length) return null;
                           const wait = _ev.filter(
                               (x) =>
                                 x.review_state !== "확인됨" &&
@@ -3599,7 +3673,7 @@ function App() {
                                   >
                                     {"원문에서 보기"}
                                   </button>
-                                  {_PM && !no && (
+                                  {_CR && !no && (
                                     <button
                                       type="button"
                                       className="rv-link-btn"
@@ -3617,14 +3691,14 @@ function App() {
                                       {"수정"}
                                     </button>
                                   )}
-                                  {!_PM && !ok && !no && (
+                                  {!_CR && !ok && !no && (
                                     <small className="rv-pmonly">
-                                      {"확인·제외는 PM(" +
+                                      {"검수가 끝난 회의록은 PM(" +
                                         Xu(_P?.pm) +
-                                        ")만 할 수 있습니다"}
+                                        ")만 고칠 수 있습니다"}
                                     </small>
                                   )}
-                                  {_PM && !ok && !no && (
+                                  {_CR && !ok && !no && (
                                     <button
                                       type="button"
                                       className="rv-btn rv-yes"
@@ -3634,7 +3708,7 @@ function App() {
                                       {"확인"}
                                     </button>
                                   )}
-                                  {_PM && !ok && !no && (
+                                  {_CR && !ok && !no && (
                                     <button
                                       type="button"
                                       className="rv-btn rv-no"
@@ -3644,7 +3718,7 @@ function App() {
                                       {"제외"}
                                     </button>
                                   )}
-                                  {_PM && (ok || no) && (
+                                  {_CR && (ok || no) && (
                                     <button
                                       type="button"
                                       className="rv-btn rv-undo"
@@ -3932,6 +4006,9 @@ function App() {
             )}
           </React.Fragment>
         )}
+        {page === "weekly" && (
+          <WeeklyReport toast={setToast} openMeeting={ff} />
+        )}
         {page === "changes" && (
           <React.Fragment>
             <button className="back" onClick={() => Be("home")}>
@@ -3946,10 +4023,22 @@ function App() {
                   <p>
                     {"PM "}
                     {Xu(D.projects.find((c) => c.id === pid)?.pm)}
+                    {" · 참여자 "}
+                    {D.projects.find((c) => c.id === pid)?.members?.length || 0}
+                    {"명"}
                   </p>
                 )}
               </div>
               <div className="actions">
+                {pid &&
+                  D.projects.find((c) => c.id === pid)?.pm === D.user.id && (
+                    <Button
+                      icon={Users}
+                      onClick={() => setModal({ type: "members", pid, add: [] })}
+                    >
+                      {"참여자"}
+                    </Button>
+                  )}
                 {pid &&
                   D.projects.find((c) => c.id === pid)?.pm === D.user.id && (
                     <Button
@@ -4814,7 +4903,7 @@ function App() {
               })
             }
           >
-            {"사용자 바꾸기"}
+            {authMode === "supabase" ? "로그아웃" : "사용자 바꾸기"}
           </Button>
         </Modal>
       )}
@@ -4849,7 +4938,15 @@ function App() {
                 Ca(async () => {
                   let c = await api("/projects", "POST", {
                     name: modal.name,
-                    members: D.people.map((y) => y.id),
+                    members:
+                      modal.members ??
+                      D.people
+                        .filter(
+                          (y) =>
+                            (y.account_status || "active") === "active" &&
+                            y.id !== D.user.id,
+                        )
+                        .map((y) => y.id),
                   });
                   modal.declared &&
                     setQueue((l) =>
@@ -4889,15 +4986,234 @@ function App() {
               }
             />
           </label>
-          <p className="muted">
-            {"PM "}
-            {D.user.name}
-            {" · 현재 팀원 "}
-            {D.people.length}
-            {"명 참여"}
-          </p>
+          {(() => {
+            // 참여자 선택: 처음에는 사용 중인 사람을 모두 고른 상태, PM(나)은 항상 포함
+            const others = D.people.filter(
+                (y) =>
+                  (y.account_status || "active") === "active" &&
+                  y.id !== D.user.id,
+              ),
+              chosen = modal.members ?? others.map((y) => y.id);
+            return (
+              <fieldset className="member-pick">
+                <legend>{"참여자"}</legend>
+                {others.map((y) => (
+                  <label key={y.id}>
+                    <input
+                      type="checkbox"
+                      checked={chosen.includes(y.id)}
+                      onChange={(ev) =>
+                        setModal({
+                          ...modal,
+                          members: ev.target.checked
+                            ? [...chosen, y.id]
+                            : chosen.filter((x) => x !== y.id),
+                        })
+                      }
+                    />
+                    {y.name}
+                    <small>{y.position || ""}</small>
+                  </label>
+                ))}
+                <p className="muted">
+                  {"PM "}
+                  {D.user.name}
+                  {" · 참여자 "}
+                  {chosen.length + 1}
+                  {"명 · 참여자만 이 프로젝트를 볼 수 있습니다."}
+                </p>
+              </fieldset>
+            );
+          })()}
         </Modal>
       )}
+      {modal?.type === "notices" && (
+        <Modal
+          title="알림"
+          close={() => setModal(null)}
+          footer={
+            notices.unread ? (
+              <Button
+                disabled={working}
+                onClick={() =>
+                  Ca(async () => {
+                    (await api("/notifications/read", "POST", { all: !0 }),
+                      await loadNotices());
+                  })
+                }
+              >
+                {"모두 읽음"}
+              </Button>
+            ) : null
+          }
+        >
+          {notices.items.length === 0 ? (
+            <p className="muted">{"새 알림이 없습니다."}</p>
+          ) : (
+            <ul className="notice-list">
+              {notices.items.map((n) => (
+                <li key={n.id} className={n.read_at ? "" : "unread"}>
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() =>
+                      Ca(async () => {
+                        (n.read_at ||
+                          (await api("/notifications/read", "POST", {
+                            ids: [n.id],
+                          })),
+                          await loadNotices(),
+                          n.target_type === "meeting" &&
+                          D.meetings.some((x) => x.id === n.target_id)
+                            ? await ff(n.target_id)
+                            : setModal(null));
+                      })
+                    }
+                  >
+                    <span>{n.title}</span>
+                    <small>
+                      {Xu(n.actor)}
+                      {" · "}
+                      {new Date(n.created_at).toLocaleString("ko-KR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
+      {modal?.type === "members" &&
+        (() => {
+          const proj = D.projects.find((c) => c.id === modal.pid);
+          if (!proj) return null;
+          const inProject = D.people.filter((y) => proj.members.includes(y.id)),
+            addable = D.people.filter(
+              (y) =>
+                !proj.members.includes(y.id) &&
+                (y.account_status || "active") === "active",
+            ),
+            picked = modal.add || [];
+          return (
+            <Modal title="참여자 관리" close={() => setModal(null)}>
+              <p className="muted">
+                {proj.name}
+                {" · 참여자는 이 프로젝트의 회의록·변경이력을 볼 수 있습니다."}
+              </p>
+              <ul className="member-list">
+                {inProject.map((y) => (
+                  <li key={y.id}>
+                    <span>
+                      {y.name}
+                      <small>
+                        {y.position || ""}
+                        {y.id === proj.pm ? " · PM" : ""}
+                        {(y.account_status || "active") !== "active"
+                          ? " · 사용 중지"
+                          : ""}
+                      </small>
+                    </span>
+                    {y.id !== proj.pm &&
+                      (modal.confirm?.id === y.id ? (
+                        <span className="member-confirm">
+                          <small>
+                            {modal.confirm.meetings
+                              ? `작성한 회의록 ${modal.confirm.meetings}건은 그대로 남지만, 이 프로젝트를 볼 수 없게 됩니다.`
+                              : "이 프로젝트를 더 이상 볼 수 없게 됩니다."}
+                          </small>
+                          <Button
+                            primary={!0}
+                            disabled={working}
+                            onClick={() =>
+                              Ca(async () => {
+                                (await api(
+                                  "/projects/" + proj.id + "/members/" + y.id,
+                                  "DELETE",
+                                ),
+                                  await he(),
+                                  setModal({ ...modal, confirm: null }),
+                                  setToast(y.name + "님을 참여자에서 뺐습니다."));
+                              })
+                            }
+                          >
+                            {"빼기 확인"}
+                          </Button>
+                          <Button onClick={() => setModal({ ...modal, confirm: null })}>
+                            {"취소"}
+                          </Button>
+                        </span>
+                      ) : (
+                        <Button
+                          disabled={working}
+                          onClick={() =>
+                            Ca(async () => {
+                              let impact = await api(
+                                "/projects/" + proj.id + "/members/" + y.id + "/impact",
+                              );
+                              impact.open_tasks
+                                ? setToast(
+                                    impact.name +
+                                      "님이 담당·검토 중인 업무가 " +
+                                      impact.open_tasks +
+                                      "건 있어 뺄 수 없습니다. 업무 담당자를 먼저 바꿔 주세요.",
+                                  )
+                                : setModal({ ...modal, confirm: impact });
+                            })
+                          }
+                        >
+                          {"빼기"}
+                        </Button>
+                      ))}
+                  </li>
+                ))}
+              </ul>
+              <h3 className="member-add-title">{"추가하기"}</h3>
+              {addable.length === 0 ? (
+                <p className="muted">{"추가할 수 있는 사람이 없습니다."}</p>
+              ) : (
+                <div className="member-pick">
+                  {addable.map((y) => (
+                    <label key={y.id}>
+                      <input
+                        type="checkbox"
+                        checked={picked.includes(y.id)}
+                        onChange={(ev) =>
+                          setModal({
+                            ...modal,
+                            add: ev.target.checked
+                              ? [...picked, y.id]
+                              : picked.filter((x) => x !== y.id),
+                          })
+                        }
+                      />
+                      {y.name}
+                      <small>{y.position || ""}</small>
+                    </label>
+                  ))}
+                  <Button
+                    primary={!0}
+                    disabled={working || !picked.length}
+                    onClick={() =>
+                      Ca(async () => {
+                        (await api("/projects/" + proj.id + "/members", "PATCH", {
+                          ids: picked,
+                        }),
+                          await he(),
+                          setModal({ ...modal, add: [] }),
+                          setToast(picked.length + "명을 참여자로 추가했습니다."));
+                      })
+                    }
+                  >
+                    {"선택한 사람 추가"}
+                  </Button>
+                </div>
+              )}
+            </Modal>
+          );
+        })()}
       {modal?.type === "event" && (
         <Modal
           title={modal.event.kind}
@@ -5049,8 +5365,54 @@ function App() {
       </div>
       <section>
         <h2>{"업무 공간에 들어가기"}</h2>
-        <p>{"사용자를 선택해 시작하세요."}</p>
-        {accounts.map((c) => (
+        {authMode === "supabase" ? (
+          <form
+            className="login-form"
+            onSubmit={(ev) => {
+              (ev.preventDefault(),
+                Ca(async () => {
+                  let r = await api("/auth/login", "POST", {
+                    user_id: loginId.trim(),
+                    password: loginPw,
+                  });
+                  (setLoginPw(""),
+                    setToast(""),
+                    r.user.role === "admin" ? setAdminUser(r.user) : await he());
+                }));
+            }}
+          >
+            <p>{"아이디와 비밀번호를 입력하세요."}</p>
+            <label>
+              {"아이디"}
+              <input
+                autoFocus={!0}
+                autoComplete="username"
+                value={loginId}
+                onChange={(c) => setLoginId(c.target.value)}
+              />
+            </label>
+            <label>
+              {"비밀번호"}
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={loginPw}
+                onChange={(c) => setLoginPw(c.target.value)}
+              />
+            </label>
+            <button
+              type="submit"
+              className="primary"
+              disabled={working || !loginId.trim() || !loginPw}
+            >
+              {"로그인"}
+              <ArrowRight size={18} />
+            </button>
+          </form>
+        ) : (
+          <p>{"사용자를 선택해 시작하세요."}</p>
+        )}
+        {authMode !== "supabase" && accounts.map((c) => (
           <button
             disabled={working}
             key={c.id}

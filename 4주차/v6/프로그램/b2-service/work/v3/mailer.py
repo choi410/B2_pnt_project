@@ -17,7 +17,8 @@ class MailError(Exception):
 
 def load_env(path=ENV_FILE):
     # Real environment variables win; no extra dependency for a KEY=VALUE file.
-    if not path.is_file():return
+    # Tests set B2_SKIP_DOTENV=1 so a developer's real SMTP/Supabase settings are never used.
+    if os.environ.get('B2_SKIP_DOTENV')=='1' or not path.is_file():return
     for line in path.read_text(encoding='utf-8-sig').splitlines():
         line=line.strip()
         if not line or line.startswith('#') or '=' not in line:continue
