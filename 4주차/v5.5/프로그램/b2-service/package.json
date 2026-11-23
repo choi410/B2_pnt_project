@@ -1,0 +1,24 @@
+{
+  "name": "b2-portable-workspace",
+  "version": "6.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node work/v3/build.cjs",
+    "test": "node work/v3/test_display.mjs && node work/v3/test_meeting_list.mjs && node work/v3/test_progress_time.mjs && node work/v3/test_requirement_display.mjs && node work/v3/test_workspace_state.mjs && node work/v3/test_chat_results.mjs && node work/v3/test_history_filters.mjs",
+    "test:legacy": "node work/v17/test_calendar.cjs && node work/v17/test_flow.cjs && node work/v17/test_story.cjs && node work/v17/test_assignment_queue.cjs",
+    "build:legacy": "node work/v17/build.cjs"
+  },
+  "dependencies": {
+    "lucide-react": "0.468.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@babel/generator": "^7.29.14",
+    "@babel/parser": "^7.29.14",
+    "@babel/traverse": "^7.29.14",
+    "@babel/types": "^7.29.14",
+    "esbuild": "0.28.2",
+    "prettier": "^3.10.1"
+  }
+}
