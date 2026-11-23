@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {groupedMeetings} from './chat_results.mjs';
+const rows=Array.from({length:19},(_,i)=>({source_id:'S'+i,project_id:'p'+i%2,project_name:'이름 '+i%2,date:i<3?'2025-07-20':i<10?'2026-07-01':'2026-08-01'}));
+const groups=groupedMeetings({meetings:rows,group_by:'month'});
+assert.deepEqual(groups.map(g=>[g.key,g.items.length]),[['2026-08',9],['2026-07',7],['2025-07',3]]);
+const all=groups.flatMap(g=>g.items),pages=[all.slice(0,8),all.slice(8,16),all.slice(16)];
+assert.equal(new Set(pages.flat().map(m=>m.source_id)).size,19);
+assert.deepEqual(groupedMeetings({meetings:rows,group_by:'project'}).map(g=>g.items.length),[10,9]);
+assert.equal(groupedMeetings({meetings:rows,group_by:'month',direction:'oldest'})[0].key,'2025-07');
+assert.equal(groupedMeetings({meetings:[{date:null}],group_by:'month'})[0].label,'날짜 미정');
+console.log('Chat result grouping, multi-year separation and pagination passed');
