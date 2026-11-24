@@ -274,6 +274,19 @@ def score(row, unit, index, start, end):
     return max(0.0, round(value, 3)), round(hit / total, 3), reasons
 
 
+# 의미 점수(e5 코사인 유사도). e5는 관련 없는 한국어 문장도 0.75~0.8쯤 나오므로 그 위만 의미 있게 본다.
+SEM_FLOOR = 0.83      # 이 아래는 의미 점수를 무시한다.
+SEM_FULL = 0.92       # 이 이상이면 가장 가깝다고 본다.
+SEM_BONUS = 0.15      # 낱말도 겹칠 때 더하는 최대 점수
+SEM_ONLY_BASE = 0.25  # 낱말은 안 겹치고 뜻만 비슷할 때의 점수(0.25~0.5, 자동 선택하지 않음)
+
+
+def semantic_strength(sim):
+    if sim is None or sim < SEM_FLOOR:
+        return 0.0
+    return min(1.0, (sim - SEM_FLOOR) / (SEM_FULL - SEM_FLOOR))
+
+
 def confidence(value):
     return 'high' if value >= 0.62 else 'mid' if value >= 0.4 else 'low'
 
@@ -290,14 +303,27 @@ def public(unit, index):
     return item
 
 
-def match_rows(rows, index, start, end, actor_name='', limit=6):
-    """행마다 후보를 붙이고, 메모에 없지만 이번 주 보고에 쓸 만한 회의록 항목(extras)을 고른다."""
+def match_rows(rows, index, start, end, actor_name='', limit=6, semantic=None):
+    """행마다 후보를 붙이고, 메모에 없지만 이번 주 보고에 쓸 만한 회의록 항목(extras)을 고른다.
+
+    semantic: {row_id: {unit_id: 유사도}} (weekly_semantic.semantic_scores). 없으면 낱말 대조만 한다.
+    의미 점수는 낱말 점수에 더해지고, 낱말이 하나도 안 겹치는 후보는 '뜻이 비슷함'으로만 보여 주며 자동 선택하지 않는다.
+    """
     start, end = _day(start), _day(end)
     matched_rows, used = [], set()
     for row in rows:
         scored = []
+        sims = (semantic or {}).get(row.get('id'), {})
         for unit in index['units']:
             value, own, reasons = score(row, unit, index, start, end)
+            strength = semantic_strength(sims.get(unit['id']))
+            if strength and value > 0:
+                value = round(value + SEM_BONUS * strength, 3)
+                reasons = reasons + [f"뜻이 비슷함 {sims[unit['id']]:.2f}"]
+            elif strength and unit['kind'] != 'meeting':
+                value = round(SEM_ONLY_BASE + 0.25 * strength, 3)
+                reasons = [f"뜻이 비슷함 {sims[unit['id']]:.2f} (겹치는 말 없음)"]
+                own = -1.0  # 의미만 맞은 후보는 자동 선택하지 않는다.
             if value >= 0.25:
                 scored.append((value, unit, reasons, own))
         scored.sort(key=lambda x: (-x[0], -x[3], _KIND_ORDER[x[1]['kind']], x[1]['meeting_date'], x[1]['id']))
@@ -308,7 +334,7 @@ def match_rows(rows, index, start, end, actor_name='', limit=6):
             level = confidence(value)
             clear = unit['meeting_id'] == top_meeting and scored[0][0] - runner_up >= 0.08
             # 회의 이름만 맞은 문장은 고르지 않는다. 문장 자체가 메모와 겹쳐야 자동 선택한다.
-            direct = own >= 0.3 or unit['kind'] == 'meeting'
+            direct = own >= 0.3 or (unit['kind'] == 'meeting' and own >= 0)
             selected = level == 'high' and clear and direct and sum(c['selected'] for c in candidates) < 4
             candidates.append({**public(unit, index), 'score': value, 'confidence': level, 'reasons': reasons, 'selected': selected})
             if selected:

@@ -96,6 +96,10 @@ class SQLiteStore:
    c.executemany('DELETE FROM rag_vectors WHERE project_id=? AND cache_key=?',[(project_id,k) for k in stale])
   for k in stale:cached.pop(k,None)
 
+ def vectors(self,project_id,keys):
+  cached=self._load(project_id)
+  return {k:cached[k] for k in dict.fromkeys(keys) if k in cached}
+
  def scores(self,project_id,keys,query):
   import numpy as np
   cached=self._load(project_id);keys=[k for k in dict.fromkeys(keys) if k in cached]
@@ -170,6 +174,12 @@ class SupabaseStore:
  def prune(self,project_id,keep):
   self._run('delete from public.meeting_chunks where project_id=%s and not (cache_key=any(%s))',(project_id,list(set(keep))))
 
+ def vectors(self,project_id,keys):
+  keys=list(dict.fromkeys(keys))
+  if not keys:return {}
+  rows=self._run('select cache_key,embedding::text from public.meeting_chunks where project_id=%s and cache_key=any(%s)',(project_id,keys),fetch=True)
+  return {r[0]:json.loads(r[1]) for r in rows}
+
  def scores(self,project_id,keys,query):
   keys=list(dict.fromkeys(keys))
   if not keys:return {}
@@ -201,11 +211,17 @@ def run(w,operation):
  return operation(SQLiteStore(w))
 
 
+EXTRA_NAMESPACES=('#weekly',)   # 주간보고 연결용 벡터 구역(work/v3/weekly_semantic.py)
+
+
 def forget_project(w,project_id,c=None):
- """프로젝트·회의록 영구 삭제 후 해당 프로젝트 벡터를 지운다. 다음 질문 때 남은 회의록으로 다시 색인된다."""
- SQLiteStore(w).delete_project(project_id,c)
+ """프로젝트·회의록 영구 삭제 후 해당 프로젝트 벡터(주간보고 구역 포함)를 지운다. 다음 사용 때 다시 색인된다."""
+ ids=[project_id]+[project_id+ns for ns in EXTRA_NAMESPACES]
+ for pid in ids:SQLiteStore(w).delete_project(pid,c)
  if configured_backend()=='supabase':
-  try:SupabaseStore().delete_project(project_id)
+  try:
+   store=SupabaseStore()
+   for pid in ids:store.delete_project(pid)
   except StoreUnavailable as exc:
    _warn('Supabase 벡터 삭제에 실패했습니다. 검색 대상에는 포함되지 않지만 DB에서 직접 지워 주세요: '+str(exc))
 

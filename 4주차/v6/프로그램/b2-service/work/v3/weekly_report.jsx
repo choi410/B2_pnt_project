@@ -254,7 +254,7 @@ export function createWeeklyReport(React, { api }) {
             <button type="button" className="button primary wk-main" disabled={!usable.length || !periodOk || !!busy} onClick={findLinks}>
               {busy === "match" ? "회의록에서 찾는 중…" : "회의록 연결 찾기"}
             </button>
-            <p className="muted">AI를 쓰지 않고 낱말을 대조해 후보를 찾습니다. 다음 화면에서 맞는 것만 골라 주세요.</p>
+            <p className="muted">겹치는 낱말과 뜻이 비슷한 문장(검색 모델이 있을 때)으로 후보를 찾습니다. 다음 화면에서 맞는 것만 골라 주세요.</p>
           </React.Fragment>
         )}
         {locked && <button type="button" className="button" disabled={!!busy} onClick={() => set({ step: "input" })}>입력 고치기</button>}
@@ -266,6 +266,11 @@ export function createWeeklyReport(React, { api }) {
         <div className="wk-panel-head">
           <h2>회의록 연결 확인</h2>
           <p className="muted">체크한 항목만 초안의 근거로 씁니다. 틀린 연결은 빼고, 빠진 회의록은 직접 찾아 넣어 주세요.</p>
+          <p className="muted">
+            {s.matched.semantic?.used
+              ? "의미 검색 사용 중(" + (s.matched.semantic.store === "supabase" ? "Supabase 벡터 캐시" : "로컬 벡터 캐시") + ") · '뜻이 비슷함' 후보는 자동으로 체크하지 않습니다."
+              : "의미 검색을 쓸 수 없어 낱말 대조로만 찾았습니다."}
+          </p>
         </div>
         {s.matched.rows.map((row) => {
           const units = [...row.candidates, ...(s.added[row.id] || [])];

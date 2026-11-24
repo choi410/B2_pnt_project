@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from work.v17.retrieval import registered_document
-from work.v3 import weekly_compose, weekly_match, weekly_parse
+from work.v3 import weekly_compose, weekly_match, weekly_parse, weekly_semantic
 
 KIND = 'weekly_report'
 
@@ -200,11 +200,16 @@ def build_router(w):
         period(body.start, body.end)
         with w.connect() as c:
             index = build_index(w, c, actor)
-        rows, extras = weekly_match.match_rows([x.model_dump() for x in body.rows], index, body.start, body.end, actor['name'])
+        memo = [x.model_dump() for x in body.rows]
+        # 표현이 다른 메모도 찾도록 의미 점수를 더한다. 검색 모델이 없으면 None → 낱말 대조만.
+        semantic = weekly_semantic.semantic_scores(w, index, memo)
+        rows, extras = weekly_match.match_rows(memo, index, body.start, body.end, actor['name'],
+                                               semantic=semantic['scores'] if semantic else None)
         meetings = sorted(({'id': u['meeting_id'], 'title': u['meeting_title'], 'date': u['meeting_date'],
                             'project_name': index['projects'][u['project_id']]} for u in index['units'] if u['kind'] == 'meeting'),
                           key=lambda m: m['date'], reverse=True)
-        return {'rows': rows, 'extras': extras, 'meetings': meetings}
+        return {'rows': rows, 'extras': extras, 'meetings': meetings,
+                'semantic': {'used': bool(semantic), 'store': semantic['backend'] if semantic else ''}}
 
     @r.get('/units')
     def units(meeting_id: str, actor=Depends(w.user)):

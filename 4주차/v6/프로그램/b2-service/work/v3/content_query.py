@@ -11,6 +11,21 @@ from work.v17.retrieval import document_lines
 LINEAR_SPEED = r'(?:라인|압연|이송|운전|생산)\s*속도'
 
 
+GENERIC_VALUE = {'수치','수치값','수치들','값','값들','숫자','숫자들','데이터','정보'}
+
+
+def missing_subject(question, terms, fields):
+    """'수치 얼마야' names no attribute. Searching for the word 수치 alone cannot
+    select evidence, so ask for the item instead of answering 'no evidence'."""
+    if not re.search(r'수치|값|숫자', question):return ''
+    if any(not isinstance(t,str) or t not in GENERIC_VALUE for t in terms or []):return ''
+    names=sorted({f for f in fields if 2<=len(f)<=15 and not re.search(r'수치|값|숫자',f)})[:6]
+    hint=' 이 프로젝트 회의록에 기록된 항목: '+', '.join(names)+'.' if names else ''
+    example=names[0] if names else '압연 속도'
+    return ('어떤 항목의 수치를 볼까요? 항목 이름을 넣어 다시 질문해 주세요. 예: “'+example+' 최근 값 알려줘”.'+hint+
+            ' 바뀐 값 전체를 보려면 “변경 이력 보여줘”라고 물어보세요.')
+
+
 def bind(plan,content):
     """Carry one interpretation through every content-answer stage."""
     plan=dict(plan)
@@ -41,7 +56,7 @@ def prepare(question, projects, docs):
         resolved=resolve(result['question'],docs)
         result.update(question=resolved['question'],search_terms=resolved['terms'],subjects=resolved['subjects'])
         result['notice']=' '.join(x for x in (result['notice'],resolved['notice']) if x)
-        result['message']=result['message'] or resolved['message']
+        result['message']=result['message'] or resolved['message'] or missing_subject(result['question'],resolved['terms'],fields)
         return result
     if len(projects)!=1:return result  # Resolve independently inside each project.
     requested=list(re.finditer(r'(?<![가-힣a-z])'+LINEAR_SPEED+r'(?=$|[^가-힣a-z]|[은는이가을를의])',q,re.I))

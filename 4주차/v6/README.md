@@ -107,6 +107,15 @@ GPU 없는 컴퓨터에서 현재 생성 모델이 동일한 속도로 실행되
 코드는 `프로그램/b2-service/work/v3/`의 `weekly*.py`, `weekly_report.jsx`, `weekly.css`입니다.
 검사: `python -m pytest work/v3/test_weekly_parse.py work/v3/test_weekly_match.py work/v3/test_weekly_compose.py work/v3/test_weekly_api.py -q`
 
+### 주간보고 연결의 의미 검색 · 2026-11-24
+
+- "회의록 연결 찾기"가 겹치는 낱말뿐 아니라 **뜻이 비슷한 문장**도 후보로 찾습니다(예: "출하 일정 조정" ↔ "납품일 12/23 변경").
+- 낱말 점수는 그대로 두고 의미 점수(e5 유사도)를 더합니다. 낱말이 하나도 안 겹치고 뜻만 비슷한 후보는 **"뜻이 비슷함 (겹치는 말 없음)"** 으로 표시하고 자동으로 체크하지 않습니다.
+- 회의록 문장 벡터는 벡터 저장소(Supabase pgvector, 연결 실패 시 로컬)에 **프로젝트ID#weekly** 구역으로 캐시합니다. AI 대화용 벡터와 섞이지 않고, 프로젝트를 영구 삭제하면 함께 지웁니다.
+- 검색 모델(03·04)이 없으면 지금처럼 낱말 대조만 하고, 연결 확인 화면에 그렇게 표시합니다. 끄려면 `.env`에 `B2_WEEKLY_SEMANTIC=0`.
+- 기준값은 `work/v3/weekly_match.py`의 `SEM_FLOOR`(0.83)·`SEM_FULL`(0.92)입니다. 후보가 너무 많거나 적으면 이 값을 조정합니다.
+- 검사: `python -m pytest work/v3/test_weekly_semantic.py work/v3/test_weekly_match.py -q`
+
 ## 벡터DB(Supabase pgvector) 의미 검색 (v5에서 통합)
 
 AI 대화의 의미 검색 벡터를 **기본은 로컬 sqlite**, 설정하면 **Supabase pgvector**에 저장합니다.

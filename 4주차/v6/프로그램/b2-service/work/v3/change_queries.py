@@ -7,6 +7,11 @@ from work.v3.query_intent import compact, normalize, strip_labels
 
 MODES={'change_rank','change_history'}
 ENTITY=r'변경\s*(?:이력|기록|내역|사항)|변경점'
+# "최근 변경 수치", "바뀐 값" ask for the ledger's values even without the word
+# 이력. A named attribute (압연 속도 ...) still goes to the source reader below.
+VALUE_CHANGE=(r'(?:변경|바뀐|바뀌었던|달라진|변동)(?:\s*된)?\s*(?:수치|값|숫자)'
+              r'|(?:수치|값|숫자)\s*(?:변경|변화|변동)'
+              r'|최근\s*(?:에\s*)?(?:변경|바뀐|바뀌|달라)')
 WORDS='''그럼 그러면 그 그거 그것 그건 그중 이 이거 저 앞서 아까 방금 나온 말한
  변경이력 변경기록 변경내역 변경사항 변경점 기록 이력 내용 내역 상세히 자세히 상세 자세한 상세내용
  어떻게돼 어떻게되 어떻게돼요 어떻게되나요 어떻게되는지 어떻게됐어 어떻게됐는지 어떤건데 어떤거야
@@ -15,13 +20,15 @@ WORDS='''그럼 그러면 그 그거 그것 그건 그중 이 이거 저 앞서 
  목록 목록으로 전부 모두 다 전체 각각 둘다 두개다 프로젝트 전체프로젝트 다른프로젝트 나머지프로젝트 상태
  날짜순 날짜순으로 오래된순 오래된순으로 최신순 최신순으로 최신 최근 처음부터 회의일 기준 기준으로
  합의 확정 요청 보류 철회 된 것 거 건 만 은 는 이 가 을 를 의 에서 에 대한 대해 야 요 좀 더 도
- 있나요 있나 있어 어떻게 되어있는지 어떻게되어있어 어떤것들 어떤것들이 순 순으로 정렬해줘'''
+ 있나요 있나 있어 어떻게 되어있는지 어떻게되어있어 어떤것들 어떤것들이 순 순으로 정렬해줘
+ 변경된 변경 바뀐 바뀌었던 바뀌었어 바뀌었나 바뀌었는지 달라진 변동 변화 수치값 수치들 수치 값들 값 숫자
+ 얼마였어 얼마인지 얼마야 얼마로 얼마 최근에 가장최근 마지막'''
 
 
 def intent(question,previous=None):
     q=normalize(question)
     prior=(previous or {}).get('job',{}).get('result',{}).get('mode') in MODES
-    explicit=bool(re.search(ENTITY,q))
+    explicit=bool(re.search(ENTITY,q)) or bool(re.search(VALUE_CHANGE,q) and not re.search(r'회의록|회의\s*목록',q))
     detail=bool(re.search(r'자세|상세|내역|목록|어떻게|뭐가\s*바뀌|뭐가\s*바뀐|내용|기록|합의|확정|요청|보류|철회|다른\s*프로젝트|\d+\s*월',q))
     # Causal or specification questions still need source reading, not a ledger
     # silently substituted for an explanation.
@@ -59,7 +66,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
                    label=' · '.join(p['name'] for p in selected))
     # Consume supported conditions completely. Unknown qualifiers must never
     # become an unrestricted history/project list.
-    remainder=strip_labels(q,named)
+    remainder=strip_labels(q,named or selected)
     for token in delta['dates']:remainder=remainder.replace(token,'')
     remainder=compact(remainder);attribute_text=remainder
     remainder=re.sub('|'.join(re.escape(x) for x in sorted(set(WORDS.split()),key=len,reverse=True)),'',remainder)
@@ -81,7 +88,10 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
     states=list(dict.fromkeys('확정' if s=='합의' else s for s in states))
     if not states and inherited:states=old_query.get('states',[])
     if re.search(r'전체\s*(?:상태|기록)|모든\s*(?:상태|기록)',q):states=[]
-    direction=delta['direction'] or (old_query.get('direction','oldest') if inherited else 'oldest')
+    # Asking for a value ("변경된 수치") wants the current one first; a plain
+    # ledger request keeps the chronological default.
+    default='newest' if re.search(VALUE_CHANGE,q) else 'oldest'
+    direction=delta['direction'] or (old_query.get('direction',default) if inherited else default)
     context.update(time_scope=scope,change_query={'project_ids':ids,'states':states,'direction':direction,'time_scope':scope})
     return context
 

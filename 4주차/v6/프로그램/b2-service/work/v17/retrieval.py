@@ -105,6 +105,19 @@ def embed(texts,prefix):
   return vectors
 
 
+def query_text(words,question):
+ """Subject vocabulary first, then the question itself.
+
+ Terms alone lose meaning when a paraphrase leaves few anchors (e.g. only
+ '수치'); the question alone is diluted by conversational endings. Lexical
+ scoring still uses only the terms, so this widens semantic recall without
+ letting filler words count as literal evidence."""
+ terms=' '.join(' / '.join(t) if isinstance(t,(list,tuple)) else t for t in words)
+ question=re.sub(r'\s+',' ',question or '').strip()
+ if not terms:return question
+ return terms if not question or question==terms else terms+'\n'+question
+
+
 def retrieve(w,project_id,docs,question,limit=6,trace=None,prune_cache=True,query_plan=None):
  import numpy as np
  passages=chunks(docs)
@@ -117,7 +130,7 @@ def retrieve(w,project_id,docs,question,limit=6,trace=None,prune_cache=True,quer
  if words is None:words=topic_terms(question)
  # Embed the subject vocabulary rather than conversational question endings.
  # Preserve the user's full request in generation, never overwrite the source.
- search_text=' '.join(' / '.join(t) if isinstance(t,(list,tuple)) else t for t in words) or question
+ search_text=query_text(words,question)
  query_vector=[]
  def vector_scores(store):
   # The vector store (sqlite or Supabase pgvector) only scores keys of the
