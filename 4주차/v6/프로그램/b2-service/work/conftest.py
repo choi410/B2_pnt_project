@@ -4,13 +4,14 @@
 - 기존 테스트는 이름 선택(체험) 로그인을 쓰므로 Supabase 로그인 모드를 끈다.
 - 테스트용 회의록이 실제 Supabase meeting_chunks에 저장되지 않도록 벡터 저장소를 sqlite로 고정한다.
 - B2_WEEKLY_SEMANTIC=0: 주간보고 연결은 낱말 대조만(실제 검색 모델을 테스트에서 쓰지 않음). 의미 점수 테스트는 따로 켠다.
+- B2_CHANGE_APPROVAL=0: 기존 테스트는 PM 승인 없이 검수 결과가 바로 반영되는 규칙을 검증한다. 승인 테스트는 따로 켠다.
 - B2_SKIP_DOTENV=1: .env 파일 자체를 읽지 않는다(실제 SMTP 메일 발송 방지).
 Supabase 동작이 필요한 테스트(test_auth_supabase, test_permissions)는 각자 가짜 값으로 다시 설정한다.
 """
 import os
 
 for key,value in {'B2_SKIP_DOTENV':'1','B2_AUTH_MODE':'','SUPABASE_URL':'','SUPABASE_ANON_KEY':'',
-                  'B2_VECTOR_STORE':'sqlite','SUPABASE_DB_URL':'','B2_VECTOR_AUTOSYNC':'0','B2_WEEKLY_SEMANTIC':'0'}.items():
+                  'B2_VECTOR_STORE':'sqlite','SUPABASE_DB_URL':'','B2_VECTOR_AUTOSYNC':'0','B2_WEEKLY_SEMANTIC':'0','B2_CHANGE_APPROVAL':'0'}.items():
     os.environ[key]=value
 
 

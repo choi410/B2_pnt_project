@@ -1619,7 +1619,8 @@ function App() {
     let y = new Map();
     return (
       (D?.changes || [])
-        .filter((I) => I.review_state === "확인됨")
+        // 2026-11-24: 승인 대상 회의록은 PM 승인 뒤에만 변경이력에 나온다(서버가 listed로 알려 줌).
+        .filter((I) => I.listed ?? I.review_state === "확인됨")
         .filter((I) => !workflow.pend(D)[I.meeting_id])
         .filter((I) => !c || I.project_id === c)
         .forEach((I) => {
@@ -3185,7 +3186,20 @@ function App() {
                       _PM = _P?.pm === D.user.id,
                       // 2026-11-23: 프로젝트 참여자도 검수가 끝나기 전까지 확인·제외·수정할 수 있다(끝난 뒤에는 PM만).
                       _open = _ev.some((x) => x.review_state !== "확인됨" && x.review_state !== "제외"),
-                      _CR = _PM || ((_P?.members || []).includes(D.user.id) && _open),
+                      // 2026-11-24: 승인 대상 회의록은 PM 승인 전까지 참여자가 고칠 수 있다.
+                      // 상세 API(meeting)는 저장된 원본 값을 주므로, 계산된 승인 상태는 workspace 목록에서 읽는다.
+                      _AP = (D.meetings || []).find((x) => x.id === meeting.id)?.change_approval || { state: "legacy" },
+                      _CR = _PM || ((_P?.members || []).includes(D.user.id) && (_open || _AP.state === "pending")),
+                      _approve = () =>
+                        Ca(async () => {
+                          await api(
+                            "/v3/meetings/" + meeting.id + "/approve-changes",
+                            "POST",
+                            { revision: meeting.revision },
+                          );
+                          setToast("승인했습니다. 변경이력에 반영됩니다.");
+                          await he();
+                        }),
                       _busy = working || at(meeting),
                       _send = (e, a, l) =>
                         Ca(async () => {
@@ -3426,6 +3440,37 @@ function App() {
                                     ? _left + "건 확인 필요"
                                     : "모두 확인함"}
                             </span>
+                            {!at(meeting) && _ev.length && _AP.state !== "legacy" ? (
+                              <span
+                                className={
+                                  _AP.state === "approved"
+                                    ? "status"
+                                    : "status warning"
+                                }
+                                title={
+                                  _AP.state === "approved"
+                                    ? "PM 승인 " + String(_AP.at || "").slice(0, 16).replace("T", " ")
+                                    : "팀원 검수가 끝나면 PM이 승인합니다"
+                                }
+                              >
+                                {_AP.state === "approved"
+                                  ? "PM 승인됨"
+                                  : _AP.state === "pending"
+                                    ? "PM 승인 대기"
+                                    : "검수 중"}
+                              </span>
+                            ) : null}
+                            {_PM && !at(meeting) && _AP.state === "pending" ? (
+                              <button
+                                type="button"
+                                className="rv-btn rv-yes"
+                                disabled={_busy}
+                                title="확인한 항목을 공식 변경이력으로 올립니다. 제외한 항목은 반영하지 않습니다."
+                                onClick={_approve}
+                              >
+                                {"변경이력 승인"}
+                              </button>
+                            ) : null}
                             {!at(meeting) && meeting.metrics?.seconds && !meeting.metrics?.cache_hit ? (
                               <small
                                 className="rv-took"
@@ -3448,9 +3493,13 @@ function App() {
                           </span>
                         </div>
                         <p className="muted">
-                          {(_left
-                            ? "모든 항목을 확인하거나 제외해야 이 회의록이 등록됩니다. 그 전에는 흐름·변경이력에 나오지 않습니다. "
-                            : "") +
+                          {(_AP.state === "reviewing"
+                            ? "참여자가 모든 항목을 확인하거나 제외하면 PM이 승인합니다. 승인 전에는 변경이력·AI 답변에 나오지 않습니다. "
+                            : _AP.state === "pending"
+                              ? "검수가 끝났습니다. PM이 승인하면 확인한 항목이 변경이력·AI 답변에 반영됩니다. "
+                              : _left
+                                ? "모든 항목을 확인하거나 제외해야 이 회의록이 등록됩니다. 그 전에는 흐름·변경이력에 나오지 않습니다. "
+                                : "") +
                             "항목을 누르면 왼쪽 원문에서 근거 문장이 형광펜으로 표시됩니다."}
                         </p>
                         {(() => {
@@ -3786,7 +3835,11 @@ function App() {
                               {_ev.length > 0 && (
                                 <div className="rv-regbar">
                                   <span>
-                                    {done
+                                    {done && _AP.state === "pending"
+                                      ? "검수가 끝났습니다. PM 승인 후 변경이력에 반영됩니다."
+                                      : done && _AP.state === "approved"
+                                      ? "PM이 승인해 변경이력에 반영되었습니다."
+                                      : done
                                       ? "모든 항목을 검수했습니다."
                                       : "검수 " +
                                         (_ev.length - _left) +
@@ -3796,6 +3849,22 @@ function App() {
                                         _left +
                                         "건"}
                                   </span>
+                                  {done && _AP.state === "pending" ? (
+                                    _PM ? (
+                                      <button
+                                        type="button"
+                                        className="rv-btn rv-reg ok"
+                                        disabled={_busy}
+                                        onClick={_approve}
+                                      >
+                                        {"변경이력 승인"}
+                                      </button>
+                                    ) : (
+                                      <button type="button" className="rv-btn rv-reg" disabled>
+                                        {"PM 승인 대기"}
+                                      </button>
+                                    )
+                                  ) : (
                                   <button
                                     type="button"
                                     className={
@@ -3811,6 +3880,7 @@ function App() {
                                   >
                                     {done ? "등록 완료" : "등록하기"}
                                   </button>
+                                  )}
                                 </div>
                               )}
                               {pop && (

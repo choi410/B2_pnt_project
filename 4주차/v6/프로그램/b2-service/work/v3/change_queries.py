@@ -12,6 +12,15 @@ ENTITY=r'변경\s*(?:이력|기록|내역|사항)|변경점'
 VALUE_CHANGE=(r'(?:변경|바뀐|바뀌었던|달라진|변동)(?:\s*된)?\s*(?:수치|값|숫자)'
               r'|(?:수치|값|숫자)\s*(?:변경|변화|변동)'
               r'|최근\s*(?:에\s*)?(?:변경|바뀐|바뀌|달라)')
+# Question words and polite request endings carry no filter condition. Listing
+# every ending in WORDS is brittle ("몇이야", "얼마예요", "나열해 줄래"), so they
+# are removed by pattern. Action verbs that change data (삭제해줘) are not here
+# and still stop as unsupported conditions.
+ASKING=(r'(?:몇|얼마|뭐|무엇|무슨)[가-힣]*|어떤|어느'
+        r'|(?:확인|나열|정리|조회|요약)해[가-힣]*|(?:알려|보여|말해)[가-힣]*'
+        r'|(?:이에요|예요|에요|인가요|입니까|인지|일까|줄래|주세요|줘)')
+# A value question ("값 몇이야") wants the current value first.
+VALUE_ASK=r'수치|값|숫자|얼마|몇\s*(?:이|으로|로)'
 WORDS='''그럼 그러면 그 그거 그것 그건 그중 이 이거 저 앞서 아까 방금 나온 말한
  변경이력 변경기록 변경내역 변경사항 변경점 기록 이력 내용 내역 상세히 자세히 상세 자세한 상세내용
  어떻게돼 어떻게되 어떻게돼요 어떻게되나요 어떻게되는지 어떻게됐어 어떻게됐는지 어떤건데 어떤거야
@@ -69,6 +78,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
     remainder=strip_labels(q,named or selected)
     for token in delta['dates']:remainder=remainder.replace(token,'')
     remainder=compact(remainder);attribute_text=remainder
+    remainder=re.sub(ASKING,'',remainder)
     remainder=re.sub('|'.join(re.escape(x) for x in sorted(set(WORDS.split()),key=len,reverse=True)),'',remainder)
     if remainder and not force:
         # Specific equipment attributes keep the existing source-backed answer
@@ -90,7 +100,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
     if re.search(r'전체\s*(?:상태|기록)|모든\s*(?:상태|기록)',q):states=[]
     # Asking for a value ("변경된 수치") wants the current one first; a plain
     # ledger request keeps the chronological default.
-    default='newest' if re.search(VALUE_CHANGE,q) else 'oldest'
+    default='newest' if re.search(VALUE_CHANGE,q) or re.search(VALUE_ASK,q) else 'oldest'
     direction=delta['direction'] or (old_query.get('direction',default) if inherited else default)
     context.update(time_scope=scope,change_query={'project_ids':ids,'states':states,'direction':direction,'time_scope':scope})
     return context

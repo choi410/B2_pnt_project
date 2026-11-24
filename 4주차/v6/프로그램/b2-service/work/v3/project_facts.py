@@ -1,5 +1,6 @@
 """Project ownership and history statistics from authorized records, without RAG."""
 import re
+from work.v3.change_approval import published
 
 
 def active_changes(w,c,projects):
@@ -11,7 +12,7 @@ def active_changes(w,c,projects):
     for event in w.all_records(c,'change_event'):
         m=meetings.get(event.get('meeting_id'))
         if not m or event.get('project_id')!=m['project_id']:continue
-        if event.get('deleted_at') or event.get('superseded_by_revision') or event.get('review_state')=='제외':continue
+        if event.get('deleted_at') or event.get('superseded_by_revision') or not published(event,m):continue
         if event.get('source_revision')!=m.get('revision'):continue
         events.append(event)
     return events,meetings

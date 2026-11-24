@@ -596,30 +596,47 @@ class ChangeEdit(Strict):
     after:str=Field(min_length=1,max_length=1500)
     evidence:list[str]=Field(min_length=1,max_length=20)
 
+class ChangeApproval(Strict):revision:int
+
 def build_router(w):
+    from work.v3 import change_approval as approval
     r=APIRouter(prefix='/api/v3')
     def review_open(c,m):
         """이 회의록(현재 리비전)에 아직 확인·제외하지 않은 변경 항목이 있는지."""
         return any(e['meeting_id']==m['id'] and e.get('source_revision')==m['revision'] and not e.get('superseded_by_revision')
                    and e.get('review_state') not in ('확인됨','제외') for e in w.all_records(c,'change_event'))
     def review_allowed(c,item,actor):
-        """검수 권한: 프로젝트 참여자는 검수가 끝나기 전까지, PM은 언제나. 검수가 끝난 뒤 수정은 PM만."""
+        """검수 권한: PM은 언제나. 참여자는 검수가 끝나기 전까지(기존 회의록) 또는 PM 승인 전까지(승인 대상 회의록)."""
         p=w.project(c,item['project_id'],actor)
         if p.get('pm')==actor['id']:return p
-        if review_open(c,w.read(c,'meeting',item['meeting_id'])):return p
+        m=w.read(c,'meeting',item['meeting_id'])
+        if review_open(c,m):return p
+        if approval.required(m):
+            if not approval.approved(m):return p
+            raise HTTPException(403,'PM이 승인한 회의록의 변경 항목은 PM만 수정할 수 있습니다.')
         raise HTTPException(403,'검수가 끝난 회의록의 변경 항목은 PM만 수정할 수 있습니다.')
-    def notify_pm(c,p,actor,m,key,title):
-        """PM에게 회의록 알림 한 번(같은 key는 다시 보내지 않음). PM 본인이 한 일은 알리지 않는다."""
-        if not p.get('pm') or p['pm']==actor['id'] or p['pm'] not in p['members']:return
-        if any(n.get('event_key')==key and n['recipient']==p['pm'] for n in w.all_records(c,'notification')):return
-        w.save(c,'notification',{'id':w.uid(),'recipient':p['pm'],'actor':actor['id'],'project_id':p['id'],'target_type':'meeting',
+    def notify(c,p,actor,m,key,title,recipient,once=True):
+        """회의록 알림. 본인이 한 일·참여자가 아닌 사람에게는 보내지 않는다.
+        once=True: 같은 key는 한 번만. once=False: 같은 key의 읽지 않은 알림이 있을 때만 생략."""
+        if not recipient or recipient==actor['id'] or recipient not in p['members']:return
+        same=[n for n in w.all_records(c,'notification') if n.get('event_key')==key and n['recipient']==recipient]
+        if any(once or not n.get('read_at') for n in same):return
+        w.save(c,'notification',{'id':w.uid(),'recipient':recipient,'actor':actor['id'],'project_id':p['id'],'target_type':'meeting',
                                  'target_id':m['id'],'title':title,'event_key':key,'created_at':w.now(),'read_at':None})
+    def notify_pm(c,p,actor,m,key,title,once=True):
+        """PM에게 회의록 알림(같은 key는 다시 보내지 않음). PM 본인이 한 일은 알리지 않는다."""
+        notify(c,p,actor,m,key,title,p.get('pm'),once)
     def review_finished(c,p,m,actor):
         """참여자의 검수로 회의록 검수가 끝났으면 PM에게 결과를 알린다."""
         if review_open(c,m):return
         items=[e for e in w.all_records(c,'change_event') if e['meeting_id']==m['id'] and e.get('source_revision')==m['revision'] and not e.get('superseded_by_revision')]
         ok=sum(e.get('review_state')=='확인됨' for e in items);no=sum(e.get('review_state')=='제외' for e in items)
         detail=f"확인 {ok} · 제외 {no}"
+        if approval.required(m):
+            # 승인 대상: PM이 되돌려 다시 검수한 경우에도 읽지 않은 알림이 없으면 다시 알린다.
+            if not approval.approved(m):
+                notify_pm(c,p,actor,m,f"meeting:{m['id']}:reviewed:{m['revision']}",f"회의록 검수 완료 · 승인 대기 · {m['title']} ({actor['name']} · {detail})",once=False)
+            return
         notify_pm(c,p,actor,m,f"meeting:{m['id']}:reviewed:{m['revision']}",f"회의록 검수 완료 · {m['title']} ({actor['name']} · {detail})")
     def queue_fields(m,history):
         from work.v3.fast_ai import VERSION
@@ -642,6 +659,7 @@ def build_router(w):
             renamed=bool(item.get('title_checked')) or norm(item['title'])!=norm(body.title)
             item.update(payload,topic_id=topic_id,version=item['version']+1,human_edited=True,title_checked=renamed,review_state='검토 전',updated_at=w.now(),updated_by=actor['id'])
             w.save(c,'change_event',item)
+            if approval.revoke(m):w.save(c,'meeting',m)
         return {**item,'context':change_context(item['quotes'],item['after'])}
     @r.post('/changes/{cid}/review')
     def review_change(cid,body:ChangeReview,actor=Depends(w.user)):
@@ -666,8 +684,29 @@ def build_router(w):
             else:item.update(review_state='\uac80\ud1a0 \uc804',confirmed_by=None,confirmed_at=None)
             item.update(version=item['version']+1,human_edited=True,updated_at=w.now(),updated_by=actor['id'],reviewed_by=actor['id'])
             w.save(c,'change_event',item)
+            if approval.revoke(m):w.save(c,'meeting',m)
             review_finished(c,p,m,actor)
         return {**item,'context':change_context(item['quotes'],item['after'])}
+    @r.post('/meetings/{mid}/approve-changes')
+    def approve_changes(mid,body:ChangeApproval,actor=Depends(w.user)):
+        """PM 최종 승인: 참여자 검수가 끝난 회의록(현재 원문 버전)의 확인 항목을 공식 변경이력으로 올린다."""
+        with w.connect() as c:
+            c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m)
+            if p.get('pm')!=actor['id']:raise HTTPException(403,'변경이력 승인은 PM만 할 수 있습니다.')
+            if not approval.required(m):raise HTTPException(409,'승인 절차 없이 반영되는 기존 회의록입니다.')
+            if body.revision!=m['revision'] or m.get('analysis_stale'):raise HTTPException(409,'원문이 바뀌었습니다. 최신 변경이력을 다시 열어 주세요.')
+            if m.get('analysis_state') in ('queued','running'):raise HTTPException(409,'회의록 분석이 끝난 뒤 승인해 주세요.')
+            if review_open(c,m):raise HTTPException(409,'검토 전 항목이 남아 있습니다. 모두 확인하거나 제외한 뒤 승인해 주세요.')
+            if approval.approved(m):raise HTTPException(409,'이미 승인한 회의록입니다.')
+            items=[e for e in w.all_records(c,'change_event') if e['meeting_id']==mid and e.get('source_revision')==m['revision'] and not e.get('superseded_by_revision')]
+            ok=sum(e.get('review_state')=='확인됨' for e in items);no=sum(e.get('review_state')=='제외' for e in items)
+            m['change_approval']={'revision':m['revision'],'by':actor['id'],'at':w.now(),'confirmed':ok,'excluded':no}
+            w.save(c,'meeting',m)
+            # 등록자와 검수한 참여자에게 알린다.
+            title=f"변경이력 승인 · {m['title']} (확인 {ok} · 제외 {no})"
+            for who in dict.fromkeys([m.get('author')]+[e.get('reviewed_by') for e in items]):
+                notify(c,p,actor,m,f"meeting:{mid}:approved:{m['revision']}:{m['change_approval']['at']}",title,who)
+        return {'meeting_id':mid,'change_approval':approval.view(m,items)}
     @r.get('/meetings/{mid}/line-boxes')
     def line_boxes(mid,actor=Depends(w.user)):
         with w.connect() as c:
@@ -794,7 +833,7 @@ def build_router(w):
                     if duplicate:d['meeting_id']=duplicate['id'];w.save(c,'import',d);result.append({'id':duplicate['id'],'duplicate':True});continue
                     from server import lines
                     mid=w.uid();job=w.uid();registered_at=w.now()
-                    m={'id':mid,'project_id':p['id'],'title':item.title.strip() or d['title'],'date':w.due(item.date or d.get('meeting_date')) or '','source':d['source'],'lines':lines(d['source']),'author':actor['id'],'candidates':[],'analysis_state':'queued','analysis_phase':'queued','analysis_origin':'로컬 AI 분석','error':'','warnings':d.get('warnings',[]),'version':1,'created_at':registered_at,'v3_job':job,'document_status':'등록 완료','revision':1,'original_source':d['source'],'original_title':d['title'],'original_date':d.get('meeting_date',''),'approved_revision':None,'document_events':[],'analysis_stale':False,'revisions':[]}
+                    m={'id':mid,'project_id':p['id'],'title':item.title.strip() or d['title'],'date':w.due(item.date or d.get('meeting_date')) or '','source':d['source'],'lines':lines(d['source']),'author':actor['id'],'candidates':[],'analysis_state':'queued','analysis_phase':'queued','analysis_origin':'로컬 AI 분석','error':'','warnings':d.get('warnings',[]),'version':1,'created_at':registered_at,'v3_job':job,'document_status':'등록 완료','revision':1,'original_source':d['source'],'original_title':d['title'],'original_date':d.get('meeting_date',''),'approved_revision':None,'document_events':[],'analysis_stale':False,'revisions':[],'approval_required':approval.enabled(),'change_approval':None}
                     m.update({k:d.get(k) for k in ('docx','pdf','txt','fingerprint','source_type','original_path','filename','preview_finished')})
                     m.update(queue_fields(m,history),registration_batch_id=batch_id,registration_batch_at=batch_at)
                     register_revision(m);w.save(c,'meeting',m);d['meeting_id']=mid;d['preview_finished']=True;w.save(c,'import',d);jobs.append((mid,job,bool(d.get('docx'))));result.append({'id':mid,'duplicate':False})
@@ -852,12 +891,12 @@ def build_router(w):
                 if not m or e.get('superseded_by_revision') or e.get('source_revision')!=m['revision'] or m.get('analysis_stale'):continue
                 refs={x['id']:x['text'] for x in m['lines']}
                 quotes=[refs[x] for x in e['evidence'] if x in refs]
-                es.append({**e,'quotes':quotes,'context':change_context(quotes,e['after']),'meeting_title':m['title'],'meeting_date':m.get('date','')})
+                es.append({**e,'quotes':quotes,'context':change_context(quotes,e['after']),'meeting_title':m['title'],'meeting_date':m.get('date',''),'listed':approval.listed(e,m)})
             attach_checks(es,lambda e:e['quotes'])
             for e in es:
                 exact=source_wording(e,e['quotes'])
                 if exact:e['after_source']=exact
-            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
+            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'change_approval':approval.view(m,[e for e in es if e['meeting_id']==m['id']]),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
             archived=[{k:m.get(k) for k in ('id','title','project_id','deleted_at')} for m in w.all_records(c,'meeting') if m['project_id'] in ids and m.get('deleted_at') and actor['id'] in (m['author'],next(p['pm'] for p in ps if p['id']==m['project_id']))]
             from work.v17 import permissions
             return {'user':actor,'permissions':permissions.summary(actor),'can_create_project':w.can_create_project(c,actor),'people':w.directory_people(c),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'6.0.0'}
@@ -901,7 +940,9 @@ def build_router(w):
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m);w.version(m,body.version)
             if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 수정할 수 있습니다.')
-            w.save_content(w,m,actor,body.title,body.date,body.source);m.update(analysis_stale=True);register_revision(m);w.save(c,'meeting',m)
+            w.save_content(w,m,actor,body.title,body.date,body.source);m.update(analysis_stale=True,change_approval=None)
+            if approval.enabled():m['approval_required']=True
+            register_revision(m);w.save(c,'meeting',m)
         return retry(mid,actor)
     @r.delete('/meetings/{mid}')
     def trash(mid,actor=Depends(w.user)):

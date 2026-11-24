@@ -7,6 +7,7 @@ from work.v3.query_intent import metadata_plan, normalize, uncertain_project, un
 from work.v3.metadata_questions import answer as metadata_answer, query_scope as metadata_scope
 from work.v3.answer_meaning import validate_meaning, completion_answer
 from work.v3.topic_search import search as search_meetings
+from work.v3.change_approval import published
 
 
 def clean(text):
@@ -90,7 +91,7 @@ def topic_matches(topics,question,projects=()):
 
 
 def event_source(e,m,p):
-    if not m or m.get('deleted_at') or m.get('analysis_stale') or e.get('superseded_by_revision') or e.get('review_state')=='제외' or e.get('source_revision')!=m['revision']:return None
+    if not m or m.get('deleted_at') or m.get('analysis_stale') or e.get('superseded_by_revision') or not published(e,m) or e.get('source_revision')!=m['revision']:return None
     doc=registered_document(m)
     if not doc or doc['revision']!=e.get('source_revision'):return None
     lines={l['id']:l['text'] for l in document_lines(doc)}
@@ -140,7 +141,8 @@ def recorded_agreements(w,c,projects,question,plan=None):
     docs=[d for m in meetings.values() if (d:=registered_document(m))]
     plan=plan or plan_question(question,docs)
     if plan['mode'] not in ('current','as_of'):return None
-    events=[e for e in w.all_records(c,'change_event') if e['project_id'] in ps]
+    # Only official records (approved, or legacy non-excluded) become ledger answers.
+    events=[e for e in w.all_records(c,'change_event') if e['project_id'] in ps and published(e,meetings.get(e.get('meeting_id')))]
     # V3 groups events directly; old imports may have no change_topic record.
     key=lambda e:(e['project_id'],e['category'],clean(e['title']))
     topics=topic_matches(list({key(e):{'id':key(e),'project_id':e['project_id'],'category':e['category'],'title':e['title']} for e in events}.values()),plan['value_question'],projects)

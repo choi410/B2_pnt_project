@@ -54,3 +54,21 @@ def test_query_vector_text_keeps_terms_and_question():
     assert query_text([['압연속도','rolling speed'],'변경'],'q')=='압연속도 / rolling speed 변경\nq'
     assert query_text([],'수치 얼마야')=='수치 얼마야'
     assert query_text(['수치'],'수치')=='수치'
+
+
+@pytest.mark.parametrize('question',[
+    '롤프레스 변경이력 값 몇이야?','롤프레스 변경 이력 값 얼마예요','롤프레스 바뀐 수치 확인해줘',
+    '롤프레스 변경 수치 나열해 줄래','롤프레스 변경이력 어떤 값들이야',
+])
+def test_question_endings_are_not_treated_as_filters(client,question):
+    c,_=client;a,b=seed(c)
+    _,r=send(c,question)
+    assert r['mode']=='change_history' and r['result_project_ids']==[a['id']]
+    dates=[e['date'] for e in r['change_items']]
+    assert dates==sorted(dates,reverse=True)
+
+
+def test_data_changing_request_still_stops(client):
+    c,_=client;seed(c)
+    _,r=send(c,'롤프레스 변경 기록 삭제해줘')
+    assert r['kind']=='clarification' and not r.get('change_items')
