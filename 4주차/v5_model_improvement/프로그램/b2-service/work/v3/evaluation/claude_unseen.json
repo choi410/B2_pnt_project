@@ -1,0 +1,16 @@
+{
+  "provenance":"Claude authored after first implementation, before its evaluation results were shared, 2026-11-18. Independent synthetic holdout; any subsequent tuning must be labeled regression, not blind validation.",
+  "project":"정제 포장 라인 검사 설비",
+  "meetings":[
+    {"date":"2027-06-07","body":"이물 검사 카메라(Foreign Matter Inspection, 이하 FMI) 해상도는 5 MP로 합의함.\n라벨 검사 카메라 해상도는 2 MP로 합의함.\n컨베이어 속도는 분당 40 m로 합의함.\n불량품 리젝트 장치는 에어 블로 방식으로 합의함."},
+    {"date":"2027-06-21","body":"FMI 해상도를 12 MP로 올리기로 합의함.\n지난 회의록의 컨베이어 속도 분당 40 m는 오기이며, 당시 합의한 값은 분당 45 m임을 정정함.\n불량품 수거함 세척 절차서를 7월 5일까지 작성해야 하나, 담당자는 정하지 못함.\n고객이 리젝트 장치를 푸셔 방식으로 바꾸는 검토를 요청했으나 이번 회의에서 결정하지 않음."}
+  ],
+  "questions":[
+    {"question":"이물 검사 카메라 해상도 지금 얼마야?","expected":"12 MP; 5 MP에서 변경. 라벨 검사 2 MP와 구분","required_dates":["2027-06-21"]},
+    {"question":"카메라 해상도 알려줘","expected":"어느 카메라인지 되묻거나 이물 검사 12 MP / 라벨 검사 2 MP 구분"},
+    {"question":"컨베이어 속도 얼마로 합의했어?","expected":"45 m/min. 40은 오기를 정정한 것이며 사양 변경으로 단정 금지","required_dates":["2027-06-21"]},
+    {"question":"수거함 세척 절차서 담당자 누구야?","expected":"원문상 미정, 기한 7월 5일","required_dates":["2027-06-21"]},
+    {"question":"FMI 납품 가격 얼마야?","expected":"등록 자료에서 찾지 못함; 다른 사양으로 대신 답하지 않음","answerable":false},
+    {"question":"리젝트 방식 푸셔로 바뀌었어?","expected":"검토 요청만 있고 미결정. 기존 합의는 에어 블로. 푸셔 확정 금지","required_dates":["2027-06-21"]}
+  ]
+}

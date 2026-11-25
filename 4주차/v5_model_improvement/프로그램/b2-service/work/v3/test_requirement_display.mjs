@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {describeRequirement} from './requirement_display.js';
+const base={title:'압연 속도',before:'120 m/min',content:'135 m/min',business_state:'요청',quotes:[{id:'L1',kind:'요구사항 근거',text:'고객은 속도 상향을 요청했다. 발열 검토가 필요하다.'},{id:'L2',kind:'담당·기한 관련 근거',text:'진효창이 구동부 영향을 검토한다.'}]};
+let d=describeRequirement(base);
+assert.equal(d.title,'압연 속도 변경 요청');assert.equal(d.value,'120 m/min → 135 m/min');
+assert.equal(d.source[0].text,base.quotes[0].text);assert.equal(d.followups[0].text,base.quotes[1].text);
+assert.equal(describeRequirement({...base,business_state:'확정'}).title,'압연 속도 변경 합의');
+for(const state of ['보류','철회'])assert.equal(describeRequirement({...base,business_state:state}).value,'135 m/min');
+assert.equal(describeRequirement({...base,before:'',business_state:'확정'}).title,'압연 속도 합의');
+assert.deepEqual(describeRequirement({...base,quotes:[]}).followups,[]);
+assert.equal(describeRequirement({...base,quotes:[base.quotes[0],{...base.quotes[0],id:'L3'}]}).source.length,1);
+console.log('Requirement labels, state semantics and source context verified');

@@ -1,0 +1,42 @@
+# Installed dependencies, model weights and machine-specific state
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+models/
+results/
+output/
+tmp/
+.vscode/
+.idea/
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.ckpt
+# The reviewed sample-data JSON and PDFs are intentionally tracked.
+data/
+*.sqlite*
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+*.pid
+*.zip
+*.7z
+*.tmp
+*.partial
+Thumbs.db
+.DS_Store
+
+# llama.cpp engine binaries (downloaded per PC)
+llama-cpp/
+# Cloudflare tunnel binary and log (downloaded per PC)
+cloudflared/
