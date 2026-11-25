@@ -33,11 +33,22 @@ def parse_date(raw):
   try:return date(*map(int,m.groups())).isoformat()
   except ValueError:pass
  return ''
+_FULL_DATE=r'20\d{2}\s*[-./년]\s*\d{1,2}\s*[-./월]\s*\d{1,2}\s*일?'
+def stated_date(text):
+ """Free-form minutes have no "회의일:" line; they open with "2026년 11월 27일 14시부터 ... 회의".
+ Take the first full date that is followed by a time or the word 회의, unless the sentence
+ is about the next meeting. The upload form shows the date, so a person can still change it."""
+ for m in re.finditer(_FULL_DATE,text or ''):
+  before=text[max(0,m.start()-12):m.start()];after=text[m.end():m.end()+40]
+  if re.search(r'다음|차기|후속',before):continue
+  sentence=re.split(r'[.。\n]',after)[0]  # the cue must be in the date's own sentence
+  if re.match(r'\s*(?:\(.\)\s*)?(?:오전|오후)?\s*\d{1,2}\s*(?:시|:\d{2})',after) or (re.search(r'회의|미팅',sentence) and not re.search(r'다음|차기|후속',sentence)):return m.group(0)
+ return ''
 def parse_text(text):
  def find(labels):
   m=re.search(r'^\s*(?:'+labels+r')\s*[:：|]\s*(.+)$',text,re.M)
   return m.group(1).strip() if m else ''
- return {'source':text,'title':find('회의명|회의 제목|제목'),'project':find('프로젝트명|프로젝트'),'meeting_date':find('일시|회의일|회의 날짜|일자'),'warnings':[]}
+ return {'source':text,'title':find('회의명|회의 제목|제목'),'project':find('프로젝트명|프로젝트'),'meeting_date':find('일시|회의일|회의 날짜|일자') or stated_date(text),'warnings':[]}
 
 def build_router(w):
  router=APIRouter(prefix='/api')

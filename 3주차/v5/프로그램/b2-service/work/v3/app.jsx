@@ -945,6 +945,664 @@ function useClock() {
     a
   );
 }
+// Re-renders itself every second; the parent only re-renders when polling returns,
+// which made the review panel's "분석 중… N초 경과" jump and freeze.
+function ElapsedSince({ start: a }) {
+  useClock();
+  const t = Date.parse(a || "");
+  if (isNaN(t)) return null;
+  const x = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return (
+    (x < 60 ? x + "초" : Math.floor(x / 60) + "분 " + (x % 60) + "초") +
+    " 경과"
+  );
+}
+// Only an agreed change (확정) replaces the previous value. For 요청·보류 the previous
+// value is still current, and for 철회 the requested value is what was dropped.
+function ChangeDelta({ e, plain }) {
+  const settled = e.business_state === "확정",
+    withdrawn = e.business_state === "철회";
+  return (
+    <React.Fragment>
+      {e.before ? (
+        settled ? (
+          <del>{e.before}</del>
+        ) : (
+          <span title="현재 값">{e.before}</span>
+        )
+      ) : null}
+      {e.before ? " → " : ""}
+      {withdrawn ? <del>{e.after}</del> : plain ? e.after : <b>{e.after}</b>}
+    </React.Fragment>
+  );
+}
+// The value agreed for the same subject in an earlier meeting (shown under a review card).
+// "changed" means this record moves away from it; otherwise it repeats it.
+function PriorValue({ e }) {
+  const p = e.prior;
+  if (!p) return null;
+  const where = (p.date ? p.date + " " : "") + (p.meeting_title || "이전 회의");
+  return (
+    <p className={"rv-prior" + (p.changed ? " moved" : "")}>
+      {p.changed
+        ? "이전 확정값 " +
+          p.value +
+          " (" +
+          where +
+          (p.reviewed ? "" : ", 검토 전") +
+          ") → 이번 " +
+          e.after +
+          (e.business_state === "확정" ? "" : " " + e.business_state)
+        : "이전 확정값과 같음 (" + where + ")"}
+    </p>
+  );
+}
+// Open issues (미결 사항) left in a meeting, and what later meetings did with them.
+// Rule-based: a "해결 후보" still needs a person to read the later sentence.
+const ISSUE_LABEL = {
+  open: "미결",
+  discussed: "다시 논의됨 · 아직 미결",
+  resolved: "해결 후보",
+};
+function OpenIssues({ issues, onOpen }) {
+  if (!issues || !issues.length) return null;
+  const order = { open: 0, discussed: 1, resolved: 2 };
+  const shown = [...issues].sort((a, b) => order[a.status] - order[b.status]);
+  const open = issues.filter((x) => x.status !== "resolved").length;
+  return (
+    <section className="point open-issues">
+      <h2>
+        {"미결 사항 "}
+        <small>
+          {open
+            ? open + "건 열림" + (issues.length > open ? " · " + (issues.length - open) + "건 해결 후보" : "")
+            : "모두 해결 후보"}
+        </small>
+      </h2>
+      {shown.map((x) => (
+        <div key={x.id} className={"issue issue-" + x.status}>
+          <span className="issue-badge">{ISSUE_LABEL[x.status]}</span>
+          <button
+            type="button"
+            className="issue-text"
+            title="원문에서 보기"
+            onClick={() => onOpen(null, x.evidence)}
+          >
+            {x.text}
+          </button>
+          {x.by && (
+            <button
+              type="button"
+              className="issue-by"
+              onClick={() => onOpen(x.by.meeting_id, x.by.evidence || [])}
+            >
+              {(x.by.date ? x.by.date + " " : "") +
+                x.by.meeting_title +
+                ": " +
+                x.by.text +
+                " ↗"}
+            </button>
+          )}
+        </div>
+      ))}
+      <p className="point-meta">
+        {"회의록 문장에서 규칙으로 찾았습니다. 해결 후보는 이후 회의 문장을 읽고 판단해 주세요."}
+      </p>
+    </section>
+  );
+}
+// The source beside the AI summary (wide screens). The cited lines are highlighted and
+// scrolled into view inside this pane only, so the summary keeps its place.
+// A PDF or Word upload is shown as its pages (what the person actually wrote), with the
+// same highlight boxes as the source tab; the read text is one click away, and is the
+// only view for spreadsheets, text files and minutes edited on the web.
+function SourcePane({ meeting, focus, onClear, api }) {
+  const box = React.useRef(null),
+    lines = meeting.lines || [],
+    canPage = !!meeting.has_pdf && !(meeting.revision > 1),
+    [asText, setAsText] = React.useState(false),
+    [boxes, setBoxes] = React.useState(null),
+    paged = canPage && !asText;
+  React.useEffect(() => {
+    setBoxes(null);
+    setAsText(false);
+  }, [meeting.id]);
+  React.useEffect(() => {
+    if (!paged || boxes) return;
+    let live = true;
+    api("/v3/meetings/" + meeting.id + "/line-boxes")
+      .then((x) => live && setBoxes(x || {}))
+      .catch(() => live && setBoxes({}));
+    return () => {
+      live = false;
+    };
+  }, [paged, meeting.id, boxes]);
+  const marks = [];
+  if (paged && boxes)
+    focus.forEach((id) =>
+      (boxes[id] || []).forEach((g) => g.rects.forEach((r) => marks.push({ page: g.page, r: r }))),
+    );
+  const lost = paged && boxes && focus.length > 0 && !marks.length;
+  React.useEffect(() => {
+    if (!box.current || !focus.length) return;
+    const t = setTimeout(() => {
+      const el = box.current.querySelector(paged ? ".pdf-hl" : '[data-line="' + focus[0] + '"]');
+      if (!el) return;
+      const top =
+        el.getBoundingClientRect().top - box.current.getBoundingClientRect().top + box.current.scrollTop;
+      box.current.scrollTo({ top: top - box.current.clientHeight / 3, behavior: "smooth" });
+    }, 80);
+    return () => clearTimeout(t);
+  }, [focus, paged, boxes]);
+  return (
+    <aside className="ai-source">
+      <div className="ai-source-head">
+        <b>{"원본"}</b>
+        <small>
+          {lost
+            ? "원본 모양에서는 이 문장의 위치를 찾지 못했습니다. 텍스트로 보면 표시됩니다."
+            : focus.length
+              ? "선택한 문장의 근거를 표시했습니다."
+              : "왼쪽 문장을 누르면 해당 위치가 표시됩니다."}
+        </small>
+        {focus.length > 0 && (
+          <button type="button" onClick={onClear}>
+            {"표시 지우기"}
+          </button>
+        )}
+        {canPage && (
+          <button type="button" onClick={() => setAsText(!asText)}>
+            {asText ? "원본 모양으로 보기" : "텍스트로 보기"}
+          </button>
+        )}
+      </div>
+      {paged ? (
+        <div className="ai-source-body ai-source-pages" ref={box}>
+          {Array.from({ length: meeting.preview_pages || 1 }, (c, y) => (
+            <div key={y} className="pdf-page">
+              <img
+                src={"/api/meetings/" + meeting.id + "/preview/" + (y + 1)}
+                alt={"원본 " + (y + 1) + "페이지"}
+              />
+              {marks
+                .filter((m) => m.page === y + 1)
+                .map((m, k) => (
+                  <span
+                    key={k}
+                    className="pdf-hl"
+                    style={{
+                      left: m.r[0] * 100 + "%",
+                      top: m.r[1] * 100 + "%",
+                      width: m.r[2] * 100 + "%",
+                      height: m.r[3] * 100 + "%",
+                    }}
+                  />
+                ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="ai-source-body source-lines" ref={box}>
+          {lines.map((c) => (
+            <p key={c.id} data-line={c.id} className={focus.includes(c.id) ? "highlight" : ""}>
+              {c.text}
+            </p>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+// Review inside the AI summary: one compact row per change record, under the sentence it
+// comes from. Same actions and the same API as the review panel beside the source
+// (which stays as it is), so the shadow-mode record of each decision is unchanged.
+function ReviewRow({ e, review, current, onDecide, onPick }) {
+  const [toggled, setOpen] = React.useState(null);
+  const ok = e.review_state === "확인됨",
+    no = e.review_state === "제외",
+    tier = !ok && !no && e.tier ? e.tier.tier : null,
+    reasons = ((e.tier && e.tier.reasons) || []).filter((r) => r.code !== "check"),
+    notes = reasons.length + (e.checks || []).length,
+    // The reasons are open on the item being reviewed now, unless the person closed them.
+    open = toggled === null ? !!current : toggled;
+  return (
+    <div
+      data-review={e.id}
+      onClick={() => onPick && !ok && !no && onPick(e)}
+      className={
+        "rv-inline" +
+        (current && !ok && !no ? " current" : "") +
+        (tier ? " tier-" + tier : "") +
+        (ok ? " done" : "") +
+        (no ? " out" : "")
+      }
+    >
+      <div className="rv-inline-head">
+        <span className="rv-inline-what">
+          <b>{e.title}</b>
+          <small>{" · " + e.category}</small>
+        </span>
+        <span className="rv-inline-value">
+          <ChangeDelta e={e} />
+        </span>
+        <span
+          className={
+            ["요청", "보류"].includes(e.business_state) ? "status warning" : "status"
+          }
+        >
+          {e.business_state === "확정" ? "합의" : e.business_state}
+        </span>
+        {tier && <span className="rv-inline-tier">{TIER_LABEL[tier]}</span>}
+        {(ok || no) && (
+          <small className={"rv-state " + (ok ? "rv-ok" : "rv-out")}>
+            {ok ? "확인됨" : "제외"}
+          </small>
+        )}
+      </div>
+      {!no && <PriorValue e={e} />}
+      <div className="rv-inline-acts">
+        {notes > 0 && !ok && !no && (
+          <button type="button" className="rv-link-btn" onClick={() => setOpen(!open)}>
+            {(open ? "판정 이유 접기" : "판정 이유 " + notes + "건") + (open ? " ▴" : " ▾")}
+          </button>
+        )}
+        {review.canAct && !no && (
+          <button
+            type="button"
+            className="rv-link-btn"
+            disabled={review.busy}
+            title="항목명이나 값을 고칩니다. 고친 뒤에는 다시 확인해야 합니다."
+            onClick={() => review.edit(e)}
+          >
+            {"수정"}
+          </button>
+        )}
+        <span className="rv-inline-gap" />
+        {!review.canAct && !ok && !no && (
+          <small className="rv-pmonly">
+            {"확인·제외는 PM(" + review.pmName + ")만 할 수 있습니다"}
+          </small>
+        )}
+        {review.canAct && !ok && !no && (
+          <React.Fragment>
+            <button
+              type="button"
+              className="rv-btn rv-yes"
+              disabled={review.busy}
+              onClick={(ev) => {
+                ev.stopPropagation();
+                review.send(e, "확인");
+                onDecide && onDecide(e);
+              }}
+            >
+              {"확인"}
+            </button>
+            <button
+              type="button"
+              className="rv-btn rv-no"
+              disabled={review.busy}
+              onClick={(ev) => {
+                ev.stopPropagation();
+                review.send(e, "제외");
+                onDecide && onDecide(e);
+              }}
+            >
+              {"제외"}
+            </button>
+          </React.Fragment>
+        )}
+        {review.canAct && (ok || no) && (
+          <button
+            type="button"
+            className="rv-link-btn"
+            disabled={review.busy}
+            onClick={() => review.send(e, "검토 전")}
+          >
+            {"되돌리기"}
+          </button>
+        )}
+      </div>
+      {open && !ok && !no && (
+        <React.Fragment>
+          <TierNote tier={e.tier} />
+          {(e.checks || []).map((k, i) => (
+            <p key={i} className="rv-warn">
+              {"⚠ " + k.text}
+            </p>
+          ))}
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+// Progress and batch buttons for the review rows of this meeting.
+function ReviewBar({ review, todoOnly, setTodoOnly }) {
+  const all = review.events,
+    wait = all.filter((x) => x.review_state !== "확인됨" && x.review_state !== "제외"),
+    autos = wait.filter((x) => x.tier && x.tier.tier === "auto" && !x.tier.spot_check);
+  if (!all.length) return null;
+  return (
+    <div className={"rv-inline-bar" + (wait.length ? "" : " done")}>
+      <span>
+        {wait.length
+          ? "검수 " + (all.length - wait.length) + " / " + all.length + "건 · 남은 " + wait.length + "건"
+          : "요구·변경 " + all.length + "건을 모두 검수했습니다."}
+      </span>
+      {wait.length > 0 && (
+        <span className="rv-inline-bar-acts">
+          <button
+            type="button"
+            className={"outline-toggle" + (todoOnly ? " on" : "")}
+            onClick={() => setTodoOnly(!todoOnly)}
+          >
+            {todoOnly ? "전체 보기" : "검수할 것만 보기"}
+          </button>
+          {review.canAct && autos.length > 0 && (
+            <button
+              type="button"
+              className="rv-btn rv-autook"
+              disabled={review.busy}
+              title="AI 판정(시험)에서 위험 신호가 없던 항목만 확인 처리합니다. 측정용 표본과 다른 항목은 그대로 둡니다."
+              onClick={() => review.all(autos, "auto")}
+            >
+              {"자동 확정 후보 " + autos.length + "건 확인"}
+            </button>
+          )}
+          {review.canAct && (
+            <button
+              type="button"
+              className="rv-btn"
+              disabled={review.busy}
+              title="남은 항목을 모두 확인 처리합니다. 원문과 대조한 뒤에 눌러 주세요."
+              onClick={() => review.all(wait, "all")}
+            >
+              {"남은 " + wait.length + "건 전체 확인"}
+            </button>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+// The whole meeting, section by section. Every line of the minutes is shown under its own
+// heading (the server builds this from the source, not from what the model chose); "key"
+// only marks decisions, follow-ups, open points and sentences a change record cites.
+function Outline({ outline, canEdit, working, onOpen, onPeek, onSave, members, people, review }) {
+  const [keyOnly, setKeyOnly] = React.useState(false),
+    [active, setActive] = React.useState(null),
+    [edit, setEdit] = React.useState(null),
+    [showHeader, setShowHeader] = React.useState(false),
+    [todoOnly, setTodoOnly] = React.useState(false);
+  const cv = outline.coverage,
+    editable = canEdit && outline.mode === "sections";
+  // Each change record is reviewed once, under one sentence: the decision that cites it,
+  // otherwise the first sentence that does. Other sentences only show a tag.
+  const byId = {},
+    home = {};
+  if (review) {
+    review.events.forEach((e) => (byId[e.id] = e));
+    const place = (sec) =>
+      sec.items.forEach((x) =>
+        x.changes.forEach((c) => {
+          if (byId[c.id] && !home[c.id]) home[c.id] = x.id;
+        }),
+      );
+    outline.sections.filter((s) => s.kind === "decision").forEach(place);
+    outline.sections.filter((s) => s.kind !== "decision").forEach(place);
+  }
+  const rowsOf = (x, sec) =>
+      review
+        ? x.changes.filter((c) => home[c.id] === x.id).map((c) => byId[c.id])
+        : [],
+    waiting = (e) => e.review_state !== "확인됨" && e.review_state !== "제외",
+    orphans = review ? review.events.filter((e) => !home[e.id]) : [];
+  // Review order = the order on the page. After 확인/제외 the next waiting item becomes the
+  // current one: it is scrolled into view and its source lines are marked in the pane beside.
+  const order = [];
+  if (review) {
+    outline.sections
+      .forEach((sec) => sec.items.forEach((x) => rowsOf(x, sec).forEach((e) => order.push(e))));
+    orphans.forEach((e) => order.push(e));
+  }
+  const [picked, setPicked] = React.useState(null),
+    firstWaiting = order.find(waiting),
+    currentId =
+      picked && order.some((e) => e.id === picked && waiting(e))
+        ? picked
+        : firstWaiting
+          ? firstWaiting.id
+          : null,
+    goTo = (e, scroll) => {
+      setPicked(e.id);
+      onPeek && onPeek(e.evidence || []);
+      if (scroll)
+        setTimeout(() => {
+          const el = document.querySelector('[data-review="' + e.id + '"]');
+          el && el.scrollIntoView({ block: "center", behavior: "smooth" });
+        }, 60);
+    },
+    decide = (e) => {
+      const at = order.findIndex((x) => x.id === e.id),
+        next =
+          order.slice(at + 1).find(waiting) ||
+          order.slice(0, at).find(waiting);
+      next ? goTo(next, true) : setPicked(null);
+    },
+    rowProps = (e) => ({
+      current: e.id === currentId,
+      onDecide: decide,
+      onPick: (x) => goTo(x, false),
+    });
+  return (
+    <React.Fragment>
+      <div className="outline-bar">
+        <span>
+          {"본문 " +
+            cv.body +
+            (cv.unit || "행") +
+            " 중 " +
+            cv.shown +
+            (cv.unit || "행") +
+            " 반영" +
+            (cv.left_out.length ? " · " + cv.left_out.length + "행 빠짐" : "")}
+          {cv.header.length > 0 && (
+            <button type="button" onClick={() => setShowHeader(!showHeader)}>
+              {" · 머리말 " + cv.header.length + "건 제외 " + (showHeader ? "▴" : "▾")}
+            </button>
+          )}
+        </span>
+        <button
+          type="button"
+          className={"outline-toggle" + (keyOnly ? " on" : "")}
+          onClick={() => setKeyOnly(!keyOnly)}
+        >
+          {keyOnly ? "전체 보기" : "핵심만 보기"}
+        </button>
+      </div>
+      {review && (
+        <ReviewBar review={review} todoOnly={todoOnly} setTodoOnly={setTodoOnly} />
+      )}
+      {outline.converted && (
+        <p className="outline-note">
+          {"절 구분이 없는 회의록이라 AI가 문장을 기본 포맷의 절로 나눴습니다. 문장은 원문 그대로입니다."}
+        </p>
+      )}
+      {outline.brief && outline.brief.length > 0 && (
+        <section className="outline-brief">
+          <h2>
+            {"AI 요약"}
+            <small>{"AI가 쓴 문장입니다. 누르면 근거 원문으로 이동합니다."}</small>
+          </h2>
+          <ul>
+            {outline.brief.map((b, i) => (
+              <li key={i}>
+                <button type="button" onClick={() => onOpen(b.evidence)}>
+                  {b.text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {showHeader && (
+        <div className="outline-header">
+          {cv.header.map((x) => (
+            <p key={x.id}>{x.text}</p>
+          ))}
+        </div>
+      )}
+      {cv.left_out.length > 0 && (
+        <div className="outline-header warn">
+          <b>{"정리에 담기지 않은 원문 행"}</b>
+          {cv.left_out.map((x) => (
+            <p key={x.id}>{x.text}</p>
+          ))}
+        </div>
+      )}
+      {outline.sections.map((sec) => {
+        const items = (keyOnly ? sec.items.filter((x) => x.key) : sec.items).filter(
+          (x) => !todoOnly || rowsOf(x, sec).some(waiting),
+        );
+        if (!items.length) return null;
+        return (
+          <section className={"point outline-sec sec-" + sec.kind} key={sec.kind}>
+            <h2>
+              {sec.label}
+              <small>{items.length + "건"}</small>
+            </h2>
+            {items.map((x) => (
+              <div className={"outline-item" + (x.key ? " key" : "")} key={x.id}>
+                {x.speaker && <p className="outline-who">{x.speaker}</p>}
+                {edit?.id === x.id ? (
+                  <React.Fragment>
+                    <textarea
+                      value={edit.value}
+                      aria-label="정리 문장 수정"
+                      onChange={(I) => setEdit({ ...edit, value: I.target.value })}
+                    />
+                    <div className="actions">
+                      <Button onClick={() => setEdit(null)}>{"취소"}</Button>
+                      <Button
+                        primary={!0}
+                        disabled={working || !edit.value.trim()}
+                        onClick={async () => {
+                          await onSave(x.id, edit.value);
+                          setEdit(null);
+                        }}
+                      >
+                        {"저장"}
+                      </Button>
+                    </div>
+                  </React.Fragment>
+                ) : (
+                  <button
+                    type="button"
+                    className={"sentence " + (active === x.id ? "selected" : "")}
+                    onClick={() => {
+                      // Selecting a sentence also marks its source lines in the pane beside it.
+                      if (active !== x.id && onPeek) onPeek(x.evidence);
+                      setActive(active === x.id ? null : x.id);
+                    }}
+                  >
+                    {x.text}
+                    {x.edited && <small className="outline-edited">{" (수정됨)"}</small>}
+                  </button>
+                )}
+                {(x.owner_name || x.due) && edit?.id !== x.id && (
+                  <FollowupMeta
+                    point={{ ...x, task_kind: "업무" }}
+                    members={members}
+                    people={people}
+                  />
+                )}
+                {rowsOf(x, sec).map((e) => (
+                  <ReviewRow key={e.id} e={e} review={review} {...rowProps(e)} />
+                ))}
+                {active === x.id && !edit && (
+                  <div className="point-tools">
+                    {editable && (
+                      <button onClick={() => setEdit({ id: x.id, value: x.text })}>
+                        <Pencil size={14} />
+                        {"수정"}
+                      </button>
+                    )}
+                    <button onClick={() => onOpen(x.evidence)}>
+                      <Quote size={14} />
+                      {"원문에서 보기"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        );
+      })}
+      {orphans.filter((e) => !todoOnly || waiting(e)).length > 0 && (
+        <section className="point outline-sec">
+          <h2>
+            {"그 밖의 검수 항목"}
+            <small>{"근거 문장이 위 정리에 표시되지 않은 항목입니다."}</small>
+          </h2>
+          {orphans
+            .filter((e) => !todoOnly || waiting(e))
+            .map((e) => (
+              <div className="outline-item" key={e.id}>
+                <button type="button" className="sentence" onClick={() => onOpen(e.evidence || [])}>
+                  {(e.quotes || []).join(" ")}
+                </button>
+                <ReviewRow e={e} review={review} {...rowProps(e)} />
+              </div>
+            ))}
+        </section>
+      )}
+    </React.Fragment>
+  );
+}
+// Follow-up line under an AI summary item: kind, owner and dates as the minutes state
+// them. A named person outside the project is shown by name only (no assignment).
+function FollowupMeta({ point: c, members, people }) {
+  const member = people.find(
+    (p) => p.name === c.owner_name && members.includes(p.id),
+  );
+  const parts = [
+    c.task_kind === "확인사항" ? "확인 사항" : "할 일",
+    c.owner_name
+      ? "담당 " + c.owner_name + (member ? "" : " (팀원 아님)")
+      : c.task_kind === "확인사항"
+        ? null
+        : "담당 미정",
+    c.due ? "기한 " + (c.start ? c.start + " ~ " : "") + c.due : null,
+  ].filter(Boolean);
+  return <p className="point-meta">{parts.join(" · ")}</p>;
+}
+// Shadow-mode triage (shown only; nothing is confirmed automatically). Rule warnings
+// already appear as ⚠ lines, so they are not repeated here.
+const TIER_LABEL = {
+  auto: "자동 확정 후보",
+  quick: "빠른 확인",
+  human: "사람 확인 필요",
+};
+function TierNote({ tier }) {
+  if (!tier || !TIER_LABEL[tier.tier]) return null;
+  const reasons = (tier.reasons || []).filter((r) => r.code !== "check");
+  return (
+    <div className={"rv-tier tier-" + tier.tier}>
+      <span className="rv-tier-badge">
+        {"AI 판정(시험) · " + TIER_LABEL[tier.tier]}
+      </span>
+      {reasons.map((r, i) => (
+        <span key={i} className="rv-tier-reason">
+          {r.text}
+        </span>
+      ))}
+      {tier.tier === "auto" && tier.spot_check && (
+        <span className="rv-tier-reason">
+          {"측정용 표본: 판정이 맞는지 재기 위해 일괄 확인에서 뺐습니다. 직접 확인해 주세요."}
+        </span>
+      )}
+    </div>
+  );
+}
 function ProgressTime({ snapshot: a, queued: e }) {
   let t = (0, React.useMemo)(() => performance.now(), [a?.measured_at]),
     l = useClock(),
@@ -1403,6 +2061,7 @@ function App() {
     [tab, setTab] = (0, React.useState)("ai"),
     [sourceText, setSourceText] = (0, React.useState)(!1),
     [focus, setFocus] = (0, React.useState)([]),
+    [rvQuietOpen, setRvQuietOpen] = (0, React.useState)(!1),
     [topic, setTopic] = (0, React.useState)(""),
     [query, setQuery] = (0, React.useState)(""),
     [listPage, setListPage] = (0, React.useState)(0),
@@ -1439,6 +2098,7 @@ function App() {
     let c = await api("/v3/workspace");
     return (setD(c), c);
   };
+  const analyzing = !!D?.meetings?.some(at);
   async function Ca(c) {
     setWorking(!0);
     try {
@@ -1460,16 +2120,20 @@ function App() {
     (0, React.useEffect)(() => {
       if (!D) return;
       let c = !1,
-        y = setInterval(() => {
-          c ||
-            he().catch((I) => {
-              I.status === 401 && setD(null);
-            });
-        }, 4e3);
+        y = setInterval(
+          () => {
+            c ||
+              he().catch((I) => {
+                I.status === 401 && setD(null);
+              });
+          },
+          // Poll faster only while an analysis is running so completion shows promptly.
+          analyzing ? 1e3 : 4e3,
+        );
       return () => {
         ((c = !0), clearInterval(y));
       };
-    }, [D?.user?.id]),
+    }, [D?.user?.id, analyzing]),
     (0, React.useEffect)(() => {
       if (!toast) return;
       let c = setTimeout(() => setToast(""), 7e3);
@@ -1497,7 +2161,7 @@ function App() {
             api("/meetings/" + meeting.id)
               .then(setMeeting)
               .catch((y) => setToast(y.message)),
-          4e3,
+          1e3,
         );
         return () => clearInterval(c);
       }
@@ -1528,8 +2192,9 @@ function App() {
       topic: topic,
     };
     let I = await api("/meetings/" + c);
+    // A meeting opens on the AI summary; a jump to evidence (y) opens the source it points at.
     (setMeeting(I),
-      setTab("source"),
+      setTab(y.length ? "source" : "ai"),
       setFocus(y),
       setSourceText(!1),
       setPage("detail"),
@@ -1682,7 +2347,12 @@ function App() {
       : [],
     wg = meeting
       ? Object.fromEntries((meeting.lines || []).map((c) => [c.id, c.text]))
-      : {};
+      : {},
+    // Full view of the meeting; absent on an old server or while the first analysis runs.
+    _outline =
+      meeting && !at(meeting)
+        ? D?.meetings.find((c) => c.id === meeting.id)?.outline || null
+        : null;
   async function Eg() {
     (await api("/v3/meetings/" + meeting.id + "/note", "PATCH", {
       version: meeting.version,
@@ -2900,8 +3570,56 @@ function App() {
                     </React.Fragment>
                   ) : null}
                 </div>
+                <div className="ai-split">
                 <article className="reading">
-                  {dn.map((c, y) => (
+                  {(() => {
+                    // Review happens beside the source (원본 tab); count what is waiting there.
+                    const waiting = (D.changes || []).filter(
+                      (e) =>
+                        e.meeting_id === meeting.id &&
+                        e.review_state !== "확인됨" &&
+                        e.review_state !== "제외",
+                    ).length;
+                    return waiting > 0 && !at(meeting) ? (
+                      <div className="review-waiting">
+                        <span>{"원본에서 확인할 요구·변경 항목이 " + waiting + "건 있습니다."}</span>
+                        <Button onClick={() => (setSourceText(!1), setTab("source"))}>{"검수하러가기"}</Button>
+                      </div>
+                    ) : null;
+                  })()}
+                  {_outline && (
+                    <Outline
+                      outline={_outline}
+                      canEdit={nf && !at(meeting)}
+                      working={working}
+                      members={
+                        D.projects.find((q) => q.id === meeting.project_id)
+                          ?.members || []
+                      }
+                      people={D.people || []}
+                      onPeek={(ids) => {
+                        window.innerWidth > 1050 && setFocus(ids);
+                      }}
+                      onOpen={(ids) => {
+                        window.innerWidth > 1050
+                          ? setFocus(ids)
+                          : (setFocus(ids), setSourceText(!0), setTab("source"));
+                      }}
+                      onSave={(line, text) =>
+                        Ca(async () => {
+                          (await api(
+                            "/v3/meetings/" + meeting.id + "/outline",
+                            "PATCH",
+                            { version: meeting.version, line: line, text: text },
+                          ),
+                            setMeeting(await api("/meetings/" + meeting.id)),
+                            await he(),
+                            setToast("정리 내용을 저장했습니다."));
+                        })
+                      }
+                    />
+                  )}
+                  {(_outline?.mode === "sections" ? [] : dn).map((c, y) => (
                     <section className="point" key={c.id}>
                       {(y === 0 || dn[y - 1].kind !== c.kind) && (
                         <h2>{c.kind}</h2>
@@ -2945,6 +3663,16 @@ function App() {
                           {c.text}
                         </button>
                       )}
+                      {c.task_kind && !(edit?.id === c.id) && (
+                        <FollowupMeta
+                          point={c}
+                          members={
+                            D.projects.find((q) => q.id === meeting.project_id)
+                              ?.members || []
+                          }
+                          people={D.people || []}
+                        />
+                      )}
                       {activePoint === c.id && !edit && (
                         <div className="point-tools">
                           {nf && !at(meeting) && (
@@ -2985,7 +3713,20 @@ function App() {
                       )}
                     </section>
                   ))}
-                  {!dn.length && !at(meeting) && (
+                  <OpenIssues
+                    issues={
+                      D.meetings.find((c) => c.id === meeting.id)
+                        ?.open_issues
+                    }
+                    onOpen={(mid, ids) =>
+                      mid && mid !== meeting.id
+                        ? Ca(() => ff(mid, ids))
+                        : window.innerWidth > 1050
+                          ? setFocus(ids)
+                          : (setFocus(ids), setSourceText(!0), setTab("source"))
+                    }
+                  />
+                  {!dn.length && !_outline && !at(meeting) && (
                     <Empty>
                       {"아직 AI 정리 내용이 없습니다."}
                       {nf && (
@@ -2994,6 +3735,15 @@ function App() {
                     </Empty>
                   )}
                 </article>
+                {(meeting.lines || []).length > 0 && (
+                  <SourcePane
+                    meeting={meeting}
+                    focus={focus}
+                    onClear={() => setFocus([])}
+                    api={api}
+                  />
+                )}
+                </div>
               </React.Fragment>
             ) : (
               <React.Fragment>
@@ -3169,16 +3919,6 @@ function App() {
                           ? x + "초"
                           : Math.floor(x / 60) + "분 " + (x % 60) + "초";
                       },
-                      _el = () => {
-                        const t = Date.parse(
-                          meeting.analysis_started_at ||
-                            meeting.analysis_queued_at ||
-                            "",
-                        );
-                        return isNaN(t)
-                          ? ""
-                          : _dur((Date.now() - t) / 1000) + " 경과";
-                      },
                       _seen = new Set(
                         D.changes
                           .filter(
@@ -3194,6 +3934,12 @@ function App() {
                         !e.before &&
                         e.business_state === "확정" &&
                         !_seen.has(_nt(e.title)),
+                      // Agreed again with the same value as the last agreement: the history does not move.
+                      _same = (e) =>
+                        e.business_state === "확정" &&
+                        !e.before &&
+                        e.prior &&
+                        !e.prior.changed,
                       _CN = [
                         [
                           "요청·보류",
@@ -3203,17 +3949,22 @@ function App() {
                           "합의·변경",
                           "이 회의에서 합의했거나 값이 바뀐 항목입니다.",
                         ],
-                        ["기준 사양", "이전 회의에 없던 최초 사양입니다."],
+                        [
+                          "기준 사양·변경 없음",
+                          "처음 기록되는 사양이거나 이전 확정값과 같은 항목입니다. 이력은 바뀌지 않습니다.",
+                        ],
                       ],
                       _cat = (e) =>
                         ["요청", "보류"].includes(e.business_state)
                           ? 0
-                          : _base(e)
+                          : _base(e) || _same(e)
                             ? 2
                             : 1,
                       _grp = (e) => _ev.filter((x) => _cat(x) === _cat(e)),
                       _sorted = _ev.slice().sort((a, d) => _cat(a) - _cat(d));
-                    const _all = (list) =>
+                    // via tells the server which button confirmed the records, so batch
+                    // confirmations are not counted as independent checks of the triage.
+                    const _all = (list, via) =>
                         Ca(async () => {
                           const done = [];
                           for (const e of list) {
@@ -3225,6 +3976,7 @@ function App() {
                                   version: e.version,
                                   action: "확인",
                                   link_to: "",
+                                  via: via,
                                 },
                               ),
                             );
@@ -3260,7 +4012,7 @@ function App() {
                             <div>
                               <b>{_CN[_cat(e)][0] + " " + g.length + "건"}</b>
                               <small>{_CN[_cat(e)][1]}</small>
-                            </div>
+                              </div>
                             <span className="rv-grouptools">
                               {_PM && wait.length ? (
                                 <button
@@ -3269,7 +4021,7 @@ function App() {
                                   disabled={_busy}
                                   onClick={(ev) => {
                                     ev.stopPropagation();
-                                    _all(wait);
+                                    _all(wait, "group");
                                   }}
                                 >
                                   {"남은 " + wait.length + "건 확인"}
@@ -3348,9 +4100,17 @@ function App() {
                                   : "status"
                               }
                             >
-                              {at(meeting)
-                                ? "분석 중… " + _el()
-                                : !_ev.length
+                              {at(meeting) ? (
+                                <React.Fragment>
+                                  {"분석 중… "}
+                                  <ElapsedSince
+                                    start={
+                                      meeting.analysis_started_at ||
+                                      meeting.analysis_queued_at
+                                    }
+                                  />
+                                </React.Fragment>
+                              ) : !_ev.length
                                   ? "항목 없음"
                                   : _left
                                     ? _left + "건 확인 필요"
@@ -3426,14 +4186,32 @@ function App() {
                                 );
                                 he().catch(() => {});
                               });
+                          // Auto candidates minus the spot-check sample, which stays for a person.
+                          const autos = wait.filter(
+                            (x) =>
+                              x.tier &&
+                              x.tier.tier === "auto" &&
+                              !x.tier.spot_check,
+                          );
                           return (
                             <div className="rv-bulk">
+                              {autos.length > 0 && (
+                                <button
+                                  type="button"
+                                  className="rv-btn rv-autook"
+                                  disabled={_busy}
+                                  title="AI 판정(시험)에서 위험 신호가 없던 항목만 확인 처리합니다. 측정용 표본과 다른 항목은 그대로 둡니다."
+                                  onClick={() => _all(autos, "auto")}
+                                >
+                                  {"자동 확정 후보 " + autos.length + "건 확인"}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="rv-btn rv-allok"
                                 disabled={_busy || !wait.length}
                                 title="아직 확인하지 않은 항목을 모두 확인 처리합니다. 제외한 항목은 그대로 둡니다."
-                                onClick={() => _all(wait)}
+                                onClick={() => _all(wait, "all")}
                               >
                                 {wait.length
                                   ? "남은 " + wait.length + "건 전체 확인"
@@ -3566,10 +4344,9 @@ function App() {
                                   </small>
                                 </div>
                                 <p className="rv-delta">
-                                  {e.before ? <del>{e.before}</del> : null}
-                                  {e.before ? " → " : ""}
-                                  <b>{e.after}</b>
+                                  <ChangeDelta e={e} />
                                 </p>
+                                {!no && <PriorValue e={e} />}
                                 {e.original_title && (
                                   <p className="rv-orig">
                                     {"회의록 표기: " + e.original_title}
@@ -3583,6 +4360,7 @@ function App() {
                                       e.title}
                                   </p>
                                 )}
+                                {!no && !ok && <TierNote tier={e.tier} />}
                                 {!no &&
                                   (e.checks || []).map((k, i) => (
                                     <p key={i} className="rv-warn">
@@ -4405,10 +5183,7 @@ function App() {
                                           "tl-val" + (long ? " long" : "")
                                         }
                                       >
-                                        {e.before ? (
-                                          <del>{e.before + " → "}</del>
-                                        ) : null}
-                                        {e.after}
+                                        <ChangeDelta e={e} plain />
                                       </div>
                                       {(e.checks || []).map((k, i) => (
                                         <p key={"w" + i} className="rv-warn">

@@ -35,3 +35,8 @@ data/
 *.partial
 Thumbs.db
 .DS_Store
+
+# llama.cpp engine binaries (downloaded per PC)
+llama-cpp/
+# Cloudflare tunnel binary and log (downloaded per PC)
+cloudflared/

@@ -36,4 +36,4 @@ def chat(messages,max_tokens,schema=None):
     with torch.inference_mode():
         output=shared._model.generate(input_ids=ids,attention_mask=torch.ones_like(ids),do_sample=False,max_new_tokens=max_tokens,pad_token_id=shared._tokenizer.eos_token_id,**options)
     text=shared._tokenizer.decode(output[0,ids.shape[1]:],skip_special_tokens=True)
-    return text,{'seconds':time.perf_counter()-started,'model':'Qwen3-4B-Instruct-2507 · shared local runtime','input_tokens':int(ids.shape[1]),'output_tokens':int(output.shape[1]-ids.shape[1])}
+    return text,{'seconds':time.perf_counter()-started,'model':__import__('work.v3.model_label',fromlist=['label']).label(),'input_tokens':int(ids.shape[1]),'output_tokens':int(output.shape[1]-ids.shape[1])}

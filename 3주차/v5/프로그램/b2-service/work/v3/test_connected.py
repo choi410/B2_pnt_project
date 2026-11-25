@@ -81,9 +81,14 @@ def test_connected_registration_analysis_and_restore(client,monkeypatch):
         assert doc and doc['body']==content and doc['revision']==1
     found=c.get('/api/v3/search',params={'q':'배치도','project_id':pid}).json()
     assert not found['items'], 'The team search hides meetings pending review'
-    for change in [e for e in data['changes'] if e['meeting_id']==mid]:
-        reviewed=c.post('/api/v3/changes/'+change['id']+'/review',json={'version':change['version'],'action':'확인'})
+    # Shadow-mode triage: a delivery date always goes to a person; the tier is only shown.
+    mine=[e for e in data['changes'] if e['meeting_id']==mid]
+    assert all(e['tier']['tier']=='human' and e['review_state']!='확인됨' for e in mine)
+    for change in mine:
+        reviewed=c.post('/api/v3/changes/'+change['id']+'/review',json={'version':change['version'],'action':'확인','via':'all'})
         assert reviewed.status_code==200,reviewed.text
+        shadow=reviewed.json()['shadow_tier']
+        assert shadow['tier']=='human' and shadow['via']=='all' and shadow['action']=='확인'
     found=c.get('/api/v3/search',params={'q':'배치도','project_id':pid}).json()
     assert [r['id'] for r in found['items']]==[mid]
     assert '배치도' in found['items'][0]['excerpts'][0]['text']

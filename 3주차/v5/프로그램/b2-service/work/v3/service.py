@@ -6,6 +6,7 @@ import hashlib, io, json, re, time, zipfile
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 from work.v17.intake import parse_date, parse_text
 from work.v17.documents import ensure_document
 from work.v17.intake_review import active
@@ -104,13 +105,22 @@ def chunks(rows,limit=3300):
     return out
 
 def note_points(m):
+    from work.v3.followups import fill_followup
     bundle=m.get('reviewed_bundle') or m.get('v3_bundle') or m.get('overview') or {}
     out=[]
     for key,label in [('summary','핵심 내용'),('decisions','결정사항'),('candidates','후속 확인')]:
         items=bundle.get(key, m.get('candidates',[]) if key=='candidates' else [])
         for i,item in enumerate(items):
             text=item.get('text') or item.get('description') or item.get('title','')
-            if text:out.append({'id':f'{key}:{i}','kind':label,'text':text,'evidence':item.get('evidence',[]),'start':item.get('start'),'due':item.get('due')})
+            if not text:continue
+            point={'id':f'{key}:{i}','kind':label,'text':text,'evidence':item.get('evidence',[]),'start':item.get('start'),'due':item.get('due')}
+            if key=='candidates':
+                # Owner and dates as the minutes state them. Older analyses did not store them,
+                # so they are read here as well (no member lookup: owner_id is only what was stored).
+                filled=fill_followup(item,{})
+                point.update(task_kind=item.get('kind'),owner_id=item.get('owner_id'),owner_name=filled.get('owner_name'),
+                             task=filled.get('task'),start=filled.get('start'),due=filled.get('due'))
+            out.append(point)
     return out
 
 def date_values(text):
@@ -145,7 +155,8 @@ def calendar_events(meetings,changes):
             if not ds and p.get('due'):ds=[d for d in [p.get('start'),p['due']] if d]
             if not ds or event_state(text) in ('보류','철회'):continue
             span=len(ds)==2 and (bool(p.get('start')) or bool(re.search(r'부터|까지.*기간|~|～',text)))
-            out.append({'id':f'note:{m["id"]}:{i}','meeting_id':m['id'],'project_id':m['project_id'],'title':text,'start':min(ds) if span else ds[-1],'end':max(ds) if span else ds[-1],'kind':'요청 일정' if event_state(text)=='요청' else '회의록 일정','evidence':p['evidence']})
+            title=p['owner_name']+' · '+p['task'] if p.get('owner_name') and p.get('task') else text
+            out.append({'id':f'note:{m["id"]}:{i}','meeting_id':m['id'],'project_id':m['project_id'],'title':title,'start':min(ds) if span else ds[-1],'end':max(ds) if span else ds[-1],'kind':'요청 일정' if event_state(text)=='요청' else '회의록 일정','evidence':p['evidence']})
     # Show only the latest agreed delivery per subject. Requests never replace it.
     latest={}
     for e in sorted(changes,key=lambda e:(e.get('effective_date',''),e.get('created_at',''))):
@@ -384,6 +395,25 @@ def attach_checks(events,quote_of):
         if e.get('review_state')!='제외':groups.setdefault((e['project_id'],e['category'],norm(e['title'])),[]).append(e)
     for e in events:
         e['checks']=[] if e.get('review_state')=='제외' else event_checks(e,quote_of(e),groups.get((e['project_id'],e['category'],norm(e['title'])),[]))
+def record_shadow_tier(w,c,item,m,action,via='single'):
+    """Shadow mode: keep the tier shown when a person first acts on a record, so the
+    triage rules can be compared with real review decisions. Never changes the decision."""
+    if item.get('shadow_tier'):return
+    try:
+        from work.v3.review_tier import assess
+        dates={x['id']:x.get('date') or '' for x in w.all_records(c,'meeting')}
+        mine=(dates.get(item['meeting_id'],''),item.get('created_at') or '')
+        same=[e for e in w.all_records(c,'change_event') if e['project_id']==item['project_id'] and not e.get('superseded_by_revision') and e.get('review_state')!='제외']
+        history=[e for e in same if e['meeting_id']!=item['meeting_id'] and (dates.get(e['meeting_id'],''),e.get('created_at') or '')<mine]
+        history.sort(key=lambda e:(dates.get(e['meeting_id'],''),e.get('created_at') or ''))
+        refs={x['id']:x['text'] for x in m['lines']}
+        siblings=[e for e in same if e['category']==item['category'] and norm(e['title'])==norm(item['title'])]
+        checks=event_checks(item,[refs[x] for x in item['evidence'] if x in refs],siblings)
+        from work.v3.review_tier import is_spot_check
+        item['shadow_tier']={**assess(item,m['lines'],history,checks),'action':action,'via':via,'spot_check':is_spot_check(item['id']),'at':w.now(),
+                             'record':{k:item.get(k) for k in ('title','category','before','after','business_state','evidence')}}
+    except Exception:
+        pass
 RETITLE_PROMPT=("회의록 문장과 거기서 뽑은 값이 주어진다. 그 값이 무엇에 대한 값인지 대상 이름을 짧게(2~12자) 답한다.\n"
  "이름은 문장에 실제로 나온 낱말로 짓는다. existing_titles에 같은 대상이 있으면 그 이름을 그대로 쓴다. 문장에 없는 대상을 지어내지 않는다.")
 def retitle(e,existing):
@@ -495,13 +525,18 @@ def run_analysis(w,mid,job):
                     if phase=='loading':current['analysis_loading_started_at']=moment
                     current['analysis_phase']=phase;w.save(c,'meeting',current)
             groups=chunks(m['lines']);bundle={'summary':[],'decisions':[],'candidates':[]};change_items=[];dropped_notes=0;metrics={'chunks':len(groups),'queue_seconds':round(acquired-started,2),'passes':[]}
+            # Follow-up owner/dates as the minutes state them; a named project member is linked.
+            from work.v3.followups import fill_followup
+            with w.connect() as c:
+                team=set(w.read(c,'project',m['project_id']).get('members') or [])
+                members={p['name']:p['id'] for p in w.all_records(c,'person') if p['id'] in team}
             for i,group in enumerate(groups):
                 # 추출할 때는 앞 회의의 항목 이름을 넘기지 않는다. 이름을 주면 모델이 엉뚱한 문장에 그 이름을 붙인다.
                 # 기존 항목과의 연결은 추출 뒤에 이름 비교(suggest_links)와 사람의 확인으로 한다.
                 notes,found,measure=extract(w,group,[],on_phase=report_phase)
                 dropped_notes+=notes.get('dropped_notes',0)
                 for key in ('summary','decisions'):bundle[key].extend(notes.get(key,[]))
-                for item in notes.get('items',[]):bundle['candidates'].append({**item,'id':w.uid(),'state':'draft','note':'','reviewer_id':None})
+                for item in notes.get('items',[]):bundle['candidates'].append({**fill_followup(item,members),'id':w.uid(),'state':'draft','note':'','reviewer_id':None})
                 metrics['model']=measure.get('model');metrics['passes'].append(measure)
                 with w.connect() as c:
                     current=w.read(c,'meeting',mid)
@@ -517,6 +552,30 @@ def run_analysis(w,mid,job):
             suggest_links(proposals,topics)
             for e in proposals:
                 if e['before'] and (norm(e['before'])==norm(e['after']) or norm(e['before']) in norm(e['after'])):e['before']=''
+            # Shadow-mode triage ⑧: ask the model again, per item, for state and work-vs-value.
+            # Only stored for comparison; a failure leaves the analysis result unchanged.
+            try:
+                from work.v3.review_tier import reask
+                t0=time.perf_counter();reask(proposals,m['lines']);metrics['reask_seconds']=round(time.perf_counter()-t0,2)
+            except Exception:pass
+            # Risks and blockers: the model names sentences, the code keeps only real line ids.
+            # A failure stores nothing and leaves the analysis result unchanged.
+            # Free-form minutes: the model gives every sentence a section of the standard format.
+            layout=None
+            try:
+                from work.v3 import freeform
+                t0=time.perf_counter();placed=freeform.assign(m['lines'])
+                if placed is not None:layout={'items':placed,'v':freeform.VERSION,'revision':revision};metrics['layout_seconds']=round(time.perf_counter()-t0,2)
+            except Exception:pass
+            # AI summary: written by the model, kept only where its numbers are in the cited sentences.
+            brief=None
+            try:
+                from work.v3 import brief as brief_writer
+                from work.v3.outline import build as outline_for_brief
+                t0=time.perf_counter();written=brief_writer.write(outline_for_brief({**m,'revision':revision,'layout':layout,'outline_edits':{}}))
+                metrics['brief_seconds']=round(time.perf_counter()-t0,2)
+                if written is not None:brief={'items':written,'v':brief_writer.VERSION,'revision':revision}
+            except Exception:pass
             with w.connect() as c:
                 c.execute('BEGIN IMMEDIATE');current=w.read(c,'meeting',mid)
                 if current.get('v3_job')!=job or current.get('deleted_at') or current['revision']!=revision:return
@@ -541,7 +600,7 @@ def run_analysis(w,mid,job):
                     if any(norm(k['after'])==norm(e['after']) and set(k['evidence'])==set(e['evidence']) for k in same):continue
                     seen.add(key);kept.append(e);w.save(c,'change_event',e)
                 metrics.update(dropped_notes=dropped_notes,dropped_changes=dropped_changes,seconds=round(time.perf_counter()-started,2),analysis_seconds=round(time.perf_counter()-acquired,2),source_chars=len(current['source']),source_revision=revision)
-                current.update(v3_bundle=bundle,reviewed_bundle=bundle,overview={k:bundle[k] for k in ('summary','decisions')},candidates=bundle['candidates'],ai_snapshot={'bundle':deepcopy(bundle),'created_at':w.now(),'model':metrics.get('model')},analysis_state='ready',analysis_phase='complete',analysis_stale=False,error='',metrics=metrics,analysis_finished_at=w.now(),change_scan_state='ready',change_scan_revision=revision,change_scan_extraction_version=EXTRACTION_VERSION,version=current['version']+1)
+                current.update(layout=layout,brief=brief,v3_bundle=bundle,reviewed_bundle=bundle,overview={k:bundle[k] for k in ('summary','decisions')},candidates=bundle['candidates'],ai_snapshot={'bundle':deepcopy(bundle),'created_at':w.now(),'model':metrics.get('model')},analysis_state='ready',analysis_phase='complete',analysis_stale=False,error='',metrics=metrics,analysis_finished_at=w.now(),change_scan_state='ready',change_scan_revision=revision,change_scan_extraction_version=EXTRACTION_VERSION,version=current['version']+1)
                 w.save(c,'meeting',current)
             # 분석이 끝나면 같은 AI로 이 회의의 진행 단계도 판단해 둔다. 실패해도 분석 결과에는 영향 없음.
             try:
@@ -570,6 +629,7 @@ class Selection(Strict):
     confirmed:bool=False
 class Batch(Strict):items:list[Selection]=Field(min_length=1,max_length=20)
 class NoteEdit(Strict):version:int;point:str;text:str=Field(min_length=1,max_length=2000)
+class OutlineEdit(Strict):version:int;line:str=Field(min_length=1,max_length=24,pattern=r'^[A-Za-z0-9]+(\.\d+)?$');text:str=Field(min_length=1,max_length=2000)
 class SourceEdit(Strict):version:int;title:str=Field(min_length=1,max_length=240);date:str='';source:str=Field(min_length=10,max_length=60000)
 class StageSet(Strict):
     stage:str=Field(default='',max_length=40)
@@ -577,6 +637,10 @@ class ChangeReview(Strict):
     version:int
     action:str
     link_to:str=Field(default='',max_length=100)
+    # How the person confirmed: one card (single), a section button (group), the
+    # "confirm all" button (all) or the "confirm auto candidates" button (auto).
+    # Only single reviews count as an independent check when measuring the triage.
+    via:Literal['single','group','all','auto']='single'
 class ChangeEdit(Strict):
     version:int
     source_revision:int
@@ -605,6 +669,7 @@ def build_router(w):
             # v3 uses inferred topic IDs, which are not legacy change_topic rows.
             payload=validate_change(w,c,Change(meeting_id=m['id'],source_revision=m['revision'],category=item['category'],effective_date=item['effective_date'],**body.model_dump(exclude={'source_revision'})),actor)
             topic_id=item.get('topic_id') if norm(item['title'])==norm(body.title) else None
+            record_shadow_tier(w,c,item,m,'수정')
             archive_record(w,item,actor,'수정')
             renamed=bool(item.get('title_checked')) or norm(item['title'])!=norm(body.title)
             item.update(payload,topic_id=topic_id,version=item['version']+1,human_edited=True,title_checked=renamed,review_state='검토 전',updated_at=w.now(),updated_by=actor['id'])
@@ -622,6 +687,7 @@ def build_router(w):
                 raise HTTPException(409,'\uc6d0\ubb38 \ub610\ub294 \ubcc0\uacbd \uae30\ub85d\uc774 \ubc14\ub01c\uc5c8\uc2b5\ub2c8\ub2e4. \ucd5c\uc2e0 \ubcc0\uacbd\uc774\ub825\uc744 \ub2e4\uc2dc \uc5f4\uc5b4 \uc8fc\uc138\uc694.')
             if m.get('analysis_state') in ('queued','running'):raise HTTPException(409,'\ud68c\uc758\ub85d \ubd84\uc11d\uc774 \ub05d\ub09c \ub4a4\uc5d0 \ud655\uc778\ud574 \uc8fc\uc138\uc694.')
             others=[e for e in w.all_records(c,'change_event') if e['project_id']==item['project_id'] and e['id']!=cid and not e.get('superseded_by_revision') and e.get('review_state')!='\uc81c\uc678']
+            if body.action in ('\ud655\uc778','\uc81c\uc678'):record_shadow_tier(w,c,item,m,body.action,body.via)
             if body.action=='\ud655\uc778':
                 target=None
                 if body.link_to:
@@ -819,10 +885,32 @@ def build_router(w):
                 quotes=[refs[x] for x in e['evidence'] if x in refs]
                 es.append({**e,'quotes':quotes,'context':change_context(quotes,e['after']),'meeting_title':m['title'],'meeting_date':m.get('date','')})
             attach_checks(es,lambda e:e['quotes'])
+            # Shadow-mode triage: show a tier and its reasons; nothing is auto-confirmed.
+            from work.v3.review_tier import attach_tiers
+            attach_tiers(es,lambda e:by[e['meeting_id']]['lines'],lambda e:e.get('meeting_date') or '')
             for e in es:
                 exact=source_wording(e,e['quotes'])
                 if exact:e['after_source']=exact
-            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
+            # Open issues (미결 사항) and what later meetings did with them; read-only, rule-based.
+            from work.v3.open_issues import attach as attach_open_issues
+            issue_input=[{'id':m['id'],'project_id':m['project_id'],'title':m['title'],'date':m.get('date'),'created_at':m.get('created_at'),'lines':m.get('lines') or []} for m in ms]
+            attach_open_issues(issue_input,es)
+            issues_of={x['id']:x.get('open_issues',[]) for x in issue_input}
+            # The whole meeting, section by section (every line shown; the model's choice only marks key points).
+            from work.v3.outline import build as build_outline
+            def outline_of(m):
+                try:
+                    out=build_outline(m,[e for e in es if e['meeting_id']==m['id']])
+                    # Undecided lines are listed once, in the open-issue box (with what later meetings did).
+                    listed={i for x in issues_of.get(m['id'],[]) for i in x['evidence']}
+                    for sec in out['sections']:
+                        # (In laid-out free-form minutes a line holds many sentences, so the text must match too.)
+                        said=' '.join(x['text'] for x in issues_of.get(m['id'],[]))
+                        if sec['kind']=='pending':sec['items']=[x for x in sec['items'] if not (set(x['evidence'])<=listed and (not out.get('converted') or x['text'] in said))]
+                    out['sections']=[sec for sec in out['sections'] if sec['items']]
+                    return out
+                except Exception:return None
+            meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'open_issues':issues_of.get(m['id'],[]),'outline':outline_of(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
             archived=[{k:m.get(k) for k in ('id','title','project_id','deleted_at')} for m in w.all_records(c,'meeting') if m['project_id'] in ids and m.get('deleted_at') and actor['id'] in (m['author'],next(p['pm'] for p in ps if p['id']==m['project_id']))]
             return {'user':actor,'people':w.all_records(c,'person'),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'4.2-integrated'}
     @r.get('/search')
@@ -860,12 +948,25 @@ def build_router(w):
             field='description' if key=='candidates' else 'text';point[field]=body.text.strip()
             m.update(reviewed_bundle=bundle,version=m['version']+1);m.setdefault('document_events',[]).append({'at':w.now(),'actor':actor['id'],'action':'AI 정리 수정','point':body.point});w.save(c,'meeting',m)
         return {'ok':True}
+    @r.patch('/meetings/{mid}/outline')
+    def edit_outline(mid,body:OutlineEdit,actor=Depends(w.user)):
+        """Edit one sentence of the full view. Stored by the id of its first source line, beside
+        the source (which is never changed); the same people as edit_note may do it."""
+        with w.connect() as c:
+            c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m);w.version(m,body.version)
+            if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 수정할 수 있습니다.')
+            if m['analysis_state'] in ('running','queued'):raise HTTPException(409,'분석 후 수정해 주세요.')
+            # body.line is a line id, or one sentence of a free-form line ('L005.2').
+            if body.line.split('.')[0] not in {x['id'] for x in m['lines']} or not body.text.strip():raise HTTPException(422,'수정할 항목을 다시 열어 주세요.')
+            edits=dict(m.get('outline_edits') or {});edits[body.line]=body.text.strip()
+            m.update(outline_edits=edits,version=m['version']+1);m.setdefault('document_events',[]).append({'at':w.now(),'actor':actor['id'],'action':'AI 정리 수정','point':'line:'+body.line});w.save(c,'meeting',m)
+        return {'ok':True}
     @r.patch('/meetings/{mid}/source',status_code=202)
     def edit_source(mid,body:SourceEdit,actor=Depends(w.user)):
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m);w.version(m,body.version)
             if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 수정할 수 있습니다.')
-            w.save_content(w,m,actor,body.title,body.date,body.source);m.update(analysis_stale=True);register_revision(m);w.save(c,'meeting',m)
+            w.save_content(w,m,actor,body.title,body.date,body.source);m.update(analysis_stale=True,outline_edits={});register_revision(m);w.save(c,'meeting',m)
         return retry(mid,actor)
     @r.delete('/meetings/{mid}')
     def trash(mid,actor=Depends(w.user)):

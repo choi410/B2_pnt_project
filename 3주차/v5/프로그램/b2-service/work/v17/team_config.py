@@ -1,7 +1,7 @@
 """Four-person LAN trial. Empty workspace; existing v1.6 data is never opened."""
 import ipaddress,os
 
-PORT=8776
+PORT=int(os.environ.get('B2_PORT','8776'))
 LAN_IP=os.environ.get('B2_TEAM_LAN_IP','').strip()
 LAN_CIDR=os.environ.get('B2_TEAM_LAN_CIDR','').strip()
 NETWORK=None
@@ -13,6 +13,13 @@ if LAN_IP:
 
 HOSTS=['127.0.0.1','localhost']+([LAN_IP] if LAN_IP else [])
 ORIGINS={f'http://{h}:{PORT}' for h in HOSTS}
+# Temporary team demo through an HTTPS tunnel (e.g. a Cloudflare quick tunnel that
+# forwards to 127.0.0.1). Only this exact host is accepted; unset means loopback only.
+PUBLIC_HOST=os.environ.get('B2_PUBLIC_HOST','').strip().lower()
+if PUBLIC_HOST:
+ import re as _re
+ if not _re.fullmatch(r'[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+',PUBLIC_HOST):raise RuntimeError('B2_PUBLIC_HOST must be a bare host name such as abc.trycloudflare.com.')
+ HOSTS.append(PUBLIC_HOST);ORIGINS.add(f'https://{PUBLIC_HOST}')
 if os.environ.get('B2_TEAM_TESTING')=='1':HOSTS+=['testserver'];ORIGINS.add('http://testserver')
 
 def allowed_client(value):
