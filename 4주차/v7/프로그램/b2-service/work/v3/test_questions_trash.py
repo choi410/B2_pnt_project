@@ -54,7 +54,7 @@ def test_partial_name_permissions_and_ambiguity(client):
     assert [x['id'] for x in r['result']['projects']]==[p2['id']]
     c.post('/api/demo-login',json={'username':'team1'})
     v=c.get('/api/projects/'+p2['id']+'/trash-preview').json()['version']
-    c.post('/api/projects/'+p2['id']+'/trash',json={'version':v})
+    c.post('/api/projects/'+p2['id']+'/trash',json={'version':v,'reason':'휴지통 이동 검증'})
     r=c.post('/api/questions',json={'question':'고유고객 프로젝트 찾아줘'}).json()
     assert [x['id'] for x in r['result']['projects']]==[p['id']]
 
@@ -127,12 +127,12 @@ def test_held_items_use_explicit_source_not_wrong_classification(client,question
 
 
 def trash_item(c,m):
-    assert c.delete('/api/v3/meetings/'+m['id']).status_code==200
+    assert c.request('DELETE','/api/v3/meetings/'+m['id'],json={'reason':'삭제 검증'}).status_code==200
     return c.get('/api/v3/trash/meeting/'+m['id']).json()
 
 
 def purge(c,item):
-    return c.request('DELETE','/api/v3/trash/'+item['kind']+'/'+item['id'],json={'version':item['version'],'confirmed':True})
+    return c.request('DELETE','/api/v3/trash/'+item['kind']+'/'+item['id'],json={'version':item['version'],'confirmed':True,'reason':'영구 삭제 검증'})
 
 
 def test_meeting_purge_cleans_own_changes_and_files_only(client):
@@ -149,7 +149,7 @@ def test_meeting_purge_cleans_own_changes_and_files_only(client):
     c.post('/api/demo-login',json={'username':'team2'})
     assert purge(c,item).status_code in (403,409)
     c.post('/api/demo-login',json={'username':'team1'})
-    assert c.request('DELETE','/api/v3/trash/meeting/'+m['id'],json={'version':item['version']-1,'confirmed':True}).status_code==409
+    assert c.request('DELETE','/api/v3/trash/meeting/'+m['id'],json={'version':item['version']-1,'confirmed':True,'reason':'영구 삭제 검증'}).status_code==409
     assert purge(c,item).status_code==200
     assert path.exists() and not __import__('pathlib').Path(m['original_path']).exists()
     with w.connect() as db:
@@ -173,12 +173,12 @@ def test_purge_blocks_linked_tasks_and_external_paths(client):
 def test_project_restore_and_purge_cascade(client):
     c,_=client;p=project(c,'프로젝트 영구 삭제');m=meeting(c,p);other=project(c,'유지 프로젝트')
     version=c.get('/api/projects/'+p['id']+'/trash-preview').json()['version']
-    assert c.post('/api/projects/'+p['id']+'/trash',json={'version':version}).status_code==200
+    assert c.post('/api/projects/'+p['id']+'/trash',json={'version':version,'reason':'휴지통 이동 검증'}).status_code==200
     item=c.get('/api/v3/trash/project/'+p['id']).json();assert item['counts']['meeting']==1
     assert c.post('/api/projects/'+p['id']+'/restore',json={'version':item['version']}).status_code==200
     assert purge(c,item).status_code==409
     version=c.get('/api/projects/'+p['id']+'/trash-preview').json()['version']
-    c.post('/api/projects/'+p['id']+'/trash',json={'version':version})
+    c.post('/api/projects/'+p['id']+'/trash',json={'version':version,'reason':'휴지통 이동 검증'})
     item=c.get('/api/v3/trash/project/'+p['id']).json()
     assert purge(c,item).status_code==200
     with w.connect() as db:

@@ -19,6 +19,10 @@ PERSON_DEADLINE = re.compile(
     r'(?:(?:그럼|그러면)\s*)?(?:그|이|해당)\s*(?:사람|분|담당자)(?:의|은|는)?\s*'
     r'(?:(?:업무|제출)\s*)?(?:기한(?:만|은|도)?|언제까지(?:야|인가요)?)\s*'
     r'(?:다시\s*)?(?:알려\s*(?:줘(?:요)?|주세요)|보여\s*줘(?:요)?)?[?!. ]*')
+ORIGINAL_DEADLINE = re.compile(
+    r'(?=.*(?:원래|당초|처음))(?:(?:그럼|그러면)\s*)?(?:그|이|해당)\s*(?:사람|분|담당자|업무)(?:의|은|는)?\s*'
+    r'(?:(?:원래|당초|처음)\s*)?(?:제출\s*일(?:자)?|(?:제출\s*)?기한|마감\s*일)(?:은|는|이|가)?\s*'
+    r'(?:(?:원래|당초|처음)\s*)?언제(?:였어(?:요)?|였지|였나요|였습니까|였는지)?[?!. ]*')
 ASSIGNMENT = re.compile(
     r'(?P<topic>.+?)\s+(?:누가\s*언제\s*까지|언제\s*까지\s*누가'
     r'|담당자?\s*(?:와|과|랑|이랑|하고|및)\s*기한|기한\s*(?:과|이랑|하고|및)\s*담당자?)'
@@ -31,7 +35,8 @@ DEADLINE = re.compile(r'기한|까지\s*(?:제출|작성|준비|내기로|마치
 
 def resolve(w, c, actor, question, previous, project_id=None, meeting_id=None):
     history = OWNER_HISTORY.fullmatch(question.strip())
-    deadline = PERSON_DEADLINE.fullmatch(question.strip())
+    original = ORIGINAL_DEADLINE.fullmatch(question.strip())
+    deadline = original or PERSON_DEADLINE.fullmatch(question.strip())
     assignment = ASSIGNMENT.fullmatch(question.strip())
     if assignment and re.search(r'각각|각자|둘\s*다|비교|처음|이력|변경',question):
         assignment=None
@@ -50,7 +55,8 @@ def resolve(w, c, actor, question, previous, project_id=None, meeting_id=None):
         return fallback
     tools = ReadTools(w,c,actor)
     named = name_matches(tools.projects(),task)
-    if deadline and project_id and project_id not in prior.get('project_ids',[]):
+    if deadline and (project_id and project_id not in prior.get('project_ids',[])
+                     or meeting_id and meeting_id not in prior.get('meeting_ids',[])):
         return context,result
     ids = [project_id] if project_id else [p['id'] for p in named] or prior.get('project_ids',[])
     if len(ids)!=1:
@@ -81,7 +87,7 @@ def resolve(w, c, actor, question, previous, project_id=None, meeting_id=None):
                 continue
             for clause in re.split(r'(?<=[.!?])\s+',line['text']):
                 role=ROLE.search(clause) or ASSIGNEE_TITLE.search(clause)
-                if coverage(clause,terms)==1 and (role or assignment and DEADLINE.search(clause)) and doc.get('date'):
+                if coverage(clause,terms)==1 and (role or (assignment or original) and DEADLINE.search(clause)) and doc.get('date'):
                     records.append((doc,line,clause))
     records.sort(key=lambda r:(r[0]['date'],r[0]['meeting_id']))
     if not records:
@@ -107,10 +113,11 @@ def resolve(w, c, actor, question, previous, project_id=None, meeting_id=None):
             return None
         selected=[assigned] if assigned==due else [assigned,due]
     elif deadline:
-        if len(latest)!=1 or UNASSIGNED.search(latest[0][2]) or not DEADLINE.search(latest[0][2]) or len(list(DATE.finditer(latest[0][2])))!=1:
+        chosen=on(records[0][0]['date']) if original else latest
+        if len(chosen)!=1 or UNASSIGNED.search(chosen[0][2]) or not DEADLINE.search(chosen[0][2]) or len(list(DATE.finditer(chosen[0][2])))!=1:
             result['message']='해당 업무의 담당자와 기한을 원문에서 함께 확인하지 못했어요. 업무나 담당자 이름을 알려주세요.'
             return context,result
-        selected=latest
+        selected=chosen
     else:
         first=on(records[0][0]['date'])
         selected=first+latest if len(first)==len(latest)==1 and first!=latest else []
@@ -126,5 +133,6 @@ def resolve(w, c, actor, question, previous, project_id=None, meeting_id=None):
         points.append({'text':quote,'project_id':project['id'],'project_name':project['name'],'sources':[sid]})
     result.update(kind='documents',mode='task_deadline' if deadline or assignment else 'task_owner_history',answerable=True,
                   points=points,sources=sources,
-                  message='회의록에 기록된 담당자와 기한이에요.' if deadline or assignment else '처음과 최근 회의의 담당 기록이에요.')
+                  message='조회한 회의록에서 처음 확인되는 제출 기한이에요.' if original else
+                  '회의록에 기록된 담당자와 기한이에요.' if deadline or assignment else '처음과 최근 회의의 담당 기록이에요.')
     return context,result

@@ -1,8 +1,8 @@
 import React,{useState,useEffect,useLayoutEffect,useRef} from 'react';
 import {createPortal} from 'react-dom';
-import {Sparkles,FileText,FolderOpen,Loader2,X,ArrowUp,ArrowUpRight,SquarePen,History,MoreHorizontal,Trash2,ChevronRight,Pencil} from 'lucide-react';
+import {Sparkles,FileText,FolderOpen,Loader2,X,ArrowUp,ArrowUpRight,SquarePen,History,MoreHorizontal,Trash2,ChevronRight,Pencil,Search} from 'lucide-react';
 import {api,Button,Modal} from './app';
-import {groupedMeetings} from './chat_results.mjs';
+import {groupedChanges,groupedMeetings,matchingProjects} from './chat_results.mjs';
 
 const phases={queued:'질문을 확인하고 있어요…',interpreting:'앞 대화와 질문의 뜻을 살펴보고 있어요…',searching:'관련 기록을 찾고 있어요…',waiting_model:'AI가 사용 중이에요. 잠시 기다려 주세요…',answering:'근거를 확인하며 답변하고 있어요…'};
 const active=m=>!['done','failed'].includes(m.state);
@@ -39,16 +39,68 @@ function MeetingLookupResults({result,onOpen}){
  </div>;
 }
 
+function ChangeProjectChoices({projects,disabled,onSelect}){
+ const [query,setQuery]=useState('');
+ const [page,setPage]=useState(0);
+ const matches=matchingProjects(projects,query);
+ const size=6,pages=Math.max(1,Math.ceil(matches.length/size));
+ return <div className="chat-change-picker">
+  <label className="chat-change-project-search"><Search size={16} aria-hidden="true"/>
+   <input type="search" aria-label="프로젝트명 또는 코드 검색" placeholder="프로젝트명 또는 코드 검색"
+    value={query} onChange={e=>{setQuery(e.target.value);setPage(0)}}/>
+  </label>
+  {matches.length?<ul>{matches.slice(page*size,(page+1)*size).map(project=><li key={project.id}>
+   <button type="button" disabled={disabled} onClick={()=>onSelect(project.id)}>
+    <FolderOpen size={16} aria-hidden="true"/><span><strong>{project.name}</strong><small>{project.id}</small></span>
+    <ChevronRight size={15} aria-hidden="true"/>
+   </button>
+  </li>)}</ul>:<p className="chat-answer-note" role="status">일치하는 프로젝트가 없어요.</p>}
+  {pages>1&&<nav className="chat-meeting-pages" aria-label="프로젝트 선택 페이지">
+   <button disabled={!page} onClick={()=>setPage(page-1)}>이전</button><span>{page+1} / {pages} · {matches.length}개</span>
+   <button disabled={page===pages-1} onClick={()=>setPage(page+1)}>다음</button>
+  </nav>}
+ </div>;
+}
+
 function ChangeHistoryResults({result,onOpen}){
- const [page,setPage]=useState(0),items=result.change_items||[],size=5,pages=Math.max(1,Math.ceil(items.length/size)),multiple=new Set(items.map(x=>x.project_id)).size>1;
- return <div className="chat-change-results"><ol start={page*size+1}>{items.slice(page*size,(page+1)*size).map(item=>{
-  const proof=result.sources?.find(s=>s.id===item.source_id);
-  return <li key={item.id}><div className="chat-change-meta"><time>{day(item.date)}</time><span className="chat-change-state">{item.state}</span>{item.review_state==='검토 전'&&<small>검토 전</small>}</div>
-   {multiple&&<small className="muted">{item.project_name}</small>}<strong>{item.title}</strong>
-   {item.before&&<p className="chat-change-before">이전 기록 · {item.before}</p>}<p className="chat-change-value">{item.after||'내용 미등록'}</p>
-   {proof?<button className="chat-change-proof" onClick={e=>onOpen(proof,e.currentTarget)}><FileText size={13}/>원문 근거 <ChevronRight size={13}/></button>:<small className="muted">연결된 원문 근거 없음</small>}
-  </li>;
- })}</ol>{pages>1&&<nav className="chat-meeting-pages" aria-label="변경 기록 페이지"><button disabled={!page} onClick={()=>setPage(page-1)}>이전</button><span>{page+1} / {pages} · {items.length}건</span><button disabled={page===pages-1} onClick={()=>setPage(page+1)}>다음</button></nav>}</div>;
+ const [page,setPage]=useState(0);
+ const groups=groupedChanges(result),size=6,pages=Math.max(1,Math.ceil(groups.length/size));
+ const multiple=new Set(result.change_items?.map(item=>item.project_id)).size>1;
+ const proofs=new Map(result.sources?.map(source=>[source.id,source]));
+ if(!groups.length)return null;
+ return <div className="chat-change-results">
+  {groups.slice(page*size,(page+1)*size).map(group=><details className="chat-change-topic" key={group.key}>
+   <summary>
+    <ChevronRight className="chat-change-chevron" size={16} aria-hidden="true"/>
+    <span className="chat-change-topic-body">
+     {multiple&&<small>{group.projectName}</small>}
+     <strong>{group.title}</strong>
+     {group.agreementConflict?<span className="chat-change-baseline">같은 회의일에 합의값 여러 건</span>
+      :group.lastAgreement?<span className="chat-change-baseline"><span>마지막 합의값</span> {group.lastAgreement.after}
+       {group.lastAgreement.review_state==='검토 전'&&<small> · 검토 전</small>}</span>
+      :<span className="chat-change-baseline">표시 범위에서 확인된 합의값 없음</span>}
+    </span>
+    <span className="chat-change-topic-status">
+     {group.latest&&<span className="chat-change-state" title={day(group.latest.date)}>최근 {group.latest.state}</span>}
+     <small>{group.items.length}건</small>
+    </span>
+   </summary>
+   <ol aria-label={group.title+' 변경 흐름'}>{group.items.map(item=>{
+    const proof=proofs.get(item.source_id);
+    return <li key={item.id}>
+     <div className="chat-change-meta"><time>{day(item.date)}</time><span className="chat-change-state">{item.state}</span>
+      {item.review_state==='검토 전'&&<small>검토 전</small>}</div>
+     <p className="chat-change-value">{item.before&&<><span className="chat-change-before">{item.before}</span> → </>}{item.after||'내용 미등록'}</p>
+     {proof?<button className="chat-change-proof" onClick={e=>onOpen(proof,e.currentTarget)}>
+      <FileText size={13}/>원문 근거 <ChevronRight size={13}/></button>:<small className="muted">연결된 원문 근거 없음</small>}
+    </li>;
+   })}</ol>
+  </details>)}
+  {pages>1&&<nav className="chat-meeting-pages" aria-label="변경 항목 페이지">
+   <button disabled={!page} onClick={()=>setPage(page-1)}>이전</button><span>{page+1} / {pages} · {groups.length}개 항목</span>
+   <button disabled={page===pages-1} onClick={()=>setPage(page+1)}>다음</button>
+  </nav>}
+ </div>;
 }
 
 function sourceLineKind(text){
@@ -191,22 +243,32 @@ export function QuestionPanel({D,open,close,onOpenProject}){
     <div className="chat-messages" ref={chatScroll} onScroll={e=>{const b=e.currentTarget;followBottom.current=b.scrollHeight-b.scrollTop-b.clientHeight<90}}>
      {loading?<p className="chat-loading" role="status"><Loader2 className="spin" size={18}/>대화를 불러오는 중…</p>:thread?.messages.length?thread.messages.map(message=>{
       const result=message.result,groups=Object.values((result?.points||[]).reduce((out,p)=>{const id=p.project_id||'all';(out[id]??={id,name:p.project_name||D.projects.find(x=>x.id===id)?.name||'',points:[]}).points.push(p);return out},{}));
+      const changeChoices=result?.mode==='change_project_choice'||result?.message?.includes('어느 프로젝트의 변경 기록을 볼까요?');
       return <article className="chat-turn" key={message.id} aria-label="질문과 답변"><div className="chat-user-row"><p className="chat-user-message">{message.question}</p></div><div className="chat-assistant"><div className="chat-speaker"><Sparkles size={15}/><b>PNT AI</b><time title={message.completed_at||message.created_at}>{hour(message.completed_at||message.created_at)}</time></div>
        {active(message)?<p className="chat-loading" role="status"><Loader2 className="spin" size={17}/>{phases[message.state]||'답변 준비 중'}</p>:message.state==='failed'?<div className="chat-answer-error"><p role="alert">{message.error||'답변을 완료하지 못했습니다.'}</p><button onClick={()=>{setDraft(message.question);input.current?.focus()}}>질문 다시 입력</button></div>:<>
         {message.context_label&&result?.mode!=='social'&&!result?.points?.some(p=>p.project_name===message.context_label)&&!(result?.kind==='projects'&&/^\d+개 프로젝트$/.test(message.context_label))&&<p className="chat-scope-line" title={message.context_label}>{message.context_label}</p>}
+        {result?.comparison_public&&<p className="chat-scope-line"><b>등록 회의록</b></p>}
         {result?.message&&<p className="chat-answer-text">{result.message}</p>}
+        {result?.public_sources?.length>0&&<div className="chat-proof-links" aria-label="공개 출처">{result.public_sources.map(s=><a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer"><FileText size={14}/>{s.title}</a>)}</div>}
         {result?.mode==='meeting_search'&&<MeetingSearchResults result={result} onOpen={(s,button)=>showSource(message,s,button)}/>}
         {result?.mode==='meeting_lookup'&&result.meetings&&<MeetingLookupResults result={result} onOpen={(s,button)=>showSource(message,s,button)}/>}
         {result?.mode==='change_history'&&<ChangeHistoryResults result={result} onOpen={(s,button)=>showSource(message,s,button)}/>}
         {(result?.mode==='change_history'||result?.mode==='meeting_lookup'&&result.meetings?[]:groups).map(g=><section className="chat-answer-group" key={g.id}>{g.name&&<h3><FolderOpen size={15}/>{g.name}</h3>}{g.points.map((point,index)=><div className="chat-point" key={index}><p className="chat-answer-text">{point.text}</p>{point.sources?.length>0&&<div className="chat-proof-links">{point.sources.map(id=>{const s=result.sources?.find(s=>s.id===id);return s&&<button key={id} aria-pressed={source?.mid===message.id&&source?.sid===id} title={s.title} onClick={e=>showSource(message,s,e.currentTarget)}><FileText size={14}/>{result.mode==='meeting_lookup'?'회의록 보기':'원문 근거'} <span>{day(s.date)}</span><ChevronRight size={13}/></button>})}</div>}</div>)}</section>)}
+        {result?.comparison_public&&<section className="chat-answer-group" aria-label="공개 자료">
+         <p className="chat-scope-line"><b>공개 자료</b></p><p className="chat-answer-text">{result.comparison_public.message}</p>
+         {result.comparison_public.sources.length>0&&<div className="chat-proof-links">{result.comparison_public.sources.map(s=>
+          <a key={s.url} href={s.url} target="_blank" rel="noopener noreferrer"><FileText size={14}/>{s.title}</a>)}</div>}
+        </section>}
         {result?.kind==='projects'&&<div className="chat-project-results">{result.projects?.map(p=><button key={p.id} onClick={()=>showProject(p.id)}><FolderOpen size={17}/><span><small>{p.id} · PM {p.pm}</small><strong>{p.name}</strong>{p.created_at&&<small className="chat-project-date">생성일 {day(p.created_at)}</small>}</span><ChevronRight size={16}/></button>)}</div>}
-        {result?.kind==='clarification'&&result.projects?.length>0&&<div className="chat-project-choices">{result.projects.map(p=><Button key={p.id} disabled={sending||pending||otherPending} onClick={()=>send(null,message.question,p.id)}>{p.name}</Button>)}</div>}
+        {result?.kind==='clarification'&&result.projects?.length>0&&(changeChoices
+         ?<ChangeProjectChoices projects={result.projects} disabled={sending||pending||otherPending} onSelect={id=>send(null,message.question,id)}/>
+         :<div className="chat-project-choices">{result.projects.map(p=><Button key={p.id} disabled={sending||pending||otherPending} onClick={()=>send(null,message.question,p.id)}>{p.name}</Button>)}</div>)}
         {result?.kind==='clarification'&&result.meetings?.length>0&&<div className="chat-project-choices">{result.meetings.map(m=><Button key={m.id} disabled={sending||pending||otherPending} onClick={()=>send(null,message.question,null,m.id)}>{day(m.date)} · {m.title}</Button>)}</div>}
         {result?.notice&&<details className="chat-result-notes"><summary>조회 기준 보기</summary><p className="chat-answer-note">{result.notice}</p></details>}
         {result?.omitted_projects?.length>0&&<p className="chat-answer-note">답변에 포함되지 않은 프로젝트: {result.omitted_projects.map(p=>p.name).join(', ')}</p>}
        </>}
       </div></article>;
-     }):<div className="chat-welcome"><Sparkles size={28}/><h3>무엇이 궁금하세요?</h3><p>프로젝트와 회의 내용을 편하게 물어보세요.<br/>앞 답변에 이어서 질문해도 돼요.</p><div className="chat-examples">{['지금 프로젝트 뭐뭐 있어?','최근 회의록 보여줘','변경이력이 가장 많은 프로젝트는?'].map(q=><button key={q} disabled={sending} onClick={()=>{setDraft(q);input.current?.focus()}}>{q}</button>)}</div></div>}
+     }):<div className="chat-welcome"><Sparkles size={28}/><h3>무엇이 궁금하세요?</h3><p>프로젝트, 회의록, 일반 지식을 물어보세요.</p><div className="chat-examples">{['지금 프로젝트 뭐뭐 있어?','최근 회의록 보여줘','별은 왜 반짝여?'].map(q=><button key={q} disabled={sending} onClick={()=>{setDraft(q);input.current?.focus()}}>{q}</button>)}</div></div>}
     </div>
     <div className="chat-compose-area">{error&&<p className="chat-form-error" role="alert">{error}</p>}{otherPending&&<p className="chat-compose-note">다른 대화의 답변이 끝나면 질문을 보낼 수 있습니다.</p>}<form className="chat-composer" onSubmit={send}><textarea ref={input} autoFocus rows={1} maxLength={500} disabled={sending||pending} aria-label="질문 입력" placeholder={thread?'이어서 물어보세요':'궁금한 내용을 입력하세요'} value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();send(e)}}}/><button type="submit" className="chat-send" aria-label="질문 보내기" disabled={sending||pending||otherPending||draft.trim().length<2}>{sending||pending?<Loader2 className="spin" size={19}/>:<ArrowUp size={20}/>}</button></form><p className="chat-compose-note">Enter로 전송 · Shift+Enter로 줄바꿈</p></div>
    </section>

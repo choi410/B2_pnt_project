@@ -16,6 +16,7 @@ from work.v3.metadata_questions import answer, query_scope
 SAME_MONTH = r'(?:같은|동일한)\s*달(?!력)'
 DATE_TOKEN = r'(?:20\d{2}\s*년\s*)?\d{1,2}\s*월(?:\s*\d{1,2}\s*일)?|20\d{2}[-./]\d{1,2}(?:[-./]\d{1,2})?|(?<!\d)\d{1,2}\s*일|20\d{2}\s*년|작년|지난해|올해|이번\s*해|지난\s*달|이번\s*달|다음\s*달|지난\s*주|이번\s*주|어제|오늘|' + SAME_MONTH
 OTHER = r'(?:다른|나머지|그\s*외|그\s*밖의)\s*(?:프로젝트|데)'
+EXCLUDE_PROJECT = r'말고|빼(?:고|\s*줘|\s*주세요)|제외'
 RESULT_SUBSET_PREFIX = re.compile(r'^\s*(?:여기서|거기서|[그이]\s*중(?:에서|에)?)\s*')
 MEETING_FREQUENCY = re.compile(
     r'몇(?:번|차례|회)(?:이나|나)?(?:회의(?:를)?)?'
@@ -27,7 +28,7 @@ WORDS = '''회의록 회의 기록 프로젝트 월별로 월별 달별로 달�
  기준으로 기준 등록일 회의일 생성일 등록된 등록한 등록 업로드한 업로드된 업로드 올라온 올린 한 했던 열린 개최한
  몇건이나 몇개나 몇건 몇개 개수 갯수 건수 총수 몇 총 합계 모두 전체 모든 전부 다 다시 여기서 그중에서 그중 이중에서 이중 거기서
  그럼 그러면 이번에는 이번엔 이제 는 은 이 가 을 를 의 에서 에는 에 로 으로 중 만 것 거 것은 거는 건 꺼 도 한 된 있나요 있나 있어 없어 없나요 없었어 있었어
- 아니 말고 빼고 제외하고 제외해줘 제외 포함해서 포함해줘 포함하고 부터 까지 이전 이후 에만 은요 는요 순으로 순서대로 순서 정렬 최신순 오래된순 오래된 오래된것부터
+ 아니 말고 빼고 빼줘 빼주세요 제외하고 제외해줘 제외 포함해서 포함해줘 포함하고 부터 까지 이전 이후 에만 은요 는요 순으로 순서대로 순서 정렬 최신순 오래된순 오래된 오래된것부터
  최신 최근 가장 제일 첫번째 첫 처음 마지막 나중 먼저 건 개 씩 제한없이 제한 없이 상관없이 기간 날짜 조건 조건없이 조건은 조건는 전부에서는
  제외다풀어줘 제외풀어줘 제외해제 해제 초기화 몇개야 몇건이야 몇건이지 몇개지 건이야 개야 건이지 개지 뿐이야 있니 없니 다시는 재조회 해줘 해줄래 부탁해
  아까 앞의 앞서 이전 결과 목록다시 전체기간 전체프로젝트 전프로젝트 에걸쳐 포함 건가요 인가요 야 지 요 네요 줘 줘요 을까
@@ -45,7 +46,7 @@ def slots(question, projects, *, meeting_context=False):
     dates = re.findall(DATE_TOKEN, rest)
     other = bool(re.search(OTHER, rest))
     all_projects = bool(re.search(r'(?:전체|모든|전부|전)\s*프로젝트|전부에서는', rest))
-    exclude = bool(named and re.search(r'말고|빼고|제외', rest))
+    exclude = bool(named and re.search(EXCLUDE_PROJECT, rest))
     exclude_date = bool(dates and re.search(r'(?:월|일|년)\s*(?:은|는|을|를)?\s*(?:말고|빼고|제외)', rest))
     correction=bool(len(dates)==2 and re.search(r'말고',rest))
     if correction:dates=dates[1:];exclude_date=False
@@ -288,7 +289,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None):
     context={'query':question,'project_id':ids[0] if len(ids)==1 else None,'project_ids':ids,'time_scope':scope,
         'subject':'','label':label,'scope_override':True,'meeting_ids':plan['meeting_ids'],'retrieval_plan':plan,
         'exploration':{'topic_query':'회의록 목록' if intent['entity']=='meeting' else '프로젝트 목록','scope_ids':ids,'excluded_ids':list(excluded),
-            'pinned_id':ids[0] if len(ids)==1 and (named or project_id) else None,'time_scope':scope,'meeting_ids':plan['meeting_ids']}}
+            'pinned_id':ids[0] if len(ids)==1 and (project_id or named and not delta['exclude']) else None,'time_scope':scope,'meeting_ids':plan['meeting_ids']}}
     if error:context.update(clarify=error,projects=[],date_scope_error=True)
     return context
 

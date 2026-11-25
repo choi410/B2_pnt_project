@@ -11,14 +11,14 @@ def stage_model(monkeypatch,text):
     monkeypatch.setattr(local_generation,'available',lambda:True)
     monkeypatch.setattr(local_generation,'chat',lambda *a,**k:(json.dumps({'in_progress':text,'planned':'','stage':'설계(기구/전장)','reason':'현재 설계를 진행하고 있음','evidence':text},ensure_ascii=False),{'model':'controlled-local-test'}))
 
-def test_stage_uses_our_runtime_preserves_source_and_pm_permissions(client,monkeypatch):
+def test_stage_uses_our_runtime_preserves_source_and_team_lead_permissions(client,monkeypatch):
     c,_=client;p=project(c);text='구동부 설계를 진행하고 있다.'
     m=meeting(c,p,text)
     stage_model(monkeypatch,text)
     assert c.post('/api/demo-login',json={'username':'team2'}).status_code==200
-    assert c.post('/api/v3/meetings/'+m['id']+'/stage-ai').status_code==403
+    assert c.post('/api/v3/meetings/'+m['id']+'/stage-ai',json={'reason':'단계 판단 근거 검토'}).status_code==403
     c.post('/api/demo-login',json={'username':'team1'})
-    r=c.post('/api/v3/meetings/'+m['id']+'/stage-ai')
+    r=c.post('/api/v3/meetings/'+m['id']+'/stage-ai',json={'reason':'단계 판단 근거 검토'})
     assert r.status_code==200,r.text
     with w.connect() as db:updated=w.read(db,'meeting',m['id'])
     assert updated['source']==m['source']
@@ -36,7 +36,7 @@ def test_stage_result_cannot_overwrite_a_new_revision(client,monkeypatch):
             current=w.read(db,'meeting',m['id']);current['revision']+=1;w.save(db,'meeting',current)
         return generate(*args,**kwargs)
     monkeypatch.setattr(local_generation,'chat',changed)
-    assert c.post('/api/v3/meetings/'+m['id']+'/stage-ai').status_code==409
+    assert c.post('/api/v3/meetings/'+m['id']+'/stage-ai',json={'reason':'단계 판단 근거 검토'}).status_code==409
     with w.connect() as db:assert not w.read(db,'meeting',m['id']).get('stage_ai')
 
 def test_review_gate_and_our_requirements_projection_coexist(client,monkeypatch):

@@ -278,10 +278,11 @@ def build_router(w):
     key='draft_version'
    else:
     key='version';p=w.project(c,d['project_id'],actor)
-    linked=any(t.get('meeting_id')==id for t in w.all_records(c,'task'))
-    submitted=any(e['action']=='회의록 검토 요청' for e in d.get('document_events',[]))
-    author_allowed=actor['id']==d['author'] and d['document_status']=='작성 중' and not submitted and not linked
-    if actor['id']!=p['pm'] and not author_allowed:raise HTTPException(403,'검토 요청되었거나 업무가 연결된 회의록은 프로젝트 PM이 처리할 수 있습니다.')
+    from work.v3.management import meeting_permission, protected, require_lead
+    if restore:require_lead(p,actor)
+    else:
+     meeting_permission(w,c,p,d,actor)
+     if protected(w,c,d):raise HTTPException(409,'회의록 화면에서 휴지통 이동 사유를 남겨 주세요.')
    if d.get(key,1)!=body.version:raise HTTPException(409,'최신 상태를 다시 열어 주세요.')
    if restore:
     if not d.get('deleted_at'):raise HTTPException(409,'휴지통에 없는 항목입니다.')

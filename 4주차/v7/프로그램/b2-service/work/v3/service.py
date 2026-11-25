@@ -11,6 +11,7 @@ from work.v17.documents import ensure_document
 from work.v17.intake_review import active
 from work.v3.analysis_progress import stamp,epoch,estimate_runtime,progress_snapshot,recent_batch
 from work.v3.approval import latest_by_meeting,summary as approval_summary
+from work.v3.management import meeting_permission, protected, record, require_lead, reason_required
 from work.v3.requirements import build_requirements
 
 def norm(text):
@@ -579,13 +580,17 @@ class Selection(Strict):
     confirmed:bool=False
 class Batch(Strict):items:list[Selection]=Field(min_length=1,max_length=20)
 class NoteEdit(Strict):version:int;point:str;text:str=Field(min_length=1,max_length=2000)
-class SourceEdit(Strict):version:int;title:str=Field(min_length=1,max_length=240);date:str='';source:str=Field(min_length=10,max_length=60000)
+class SourceEdit(Strict):version:int;title:str=Field(min_length=1,max_length=240);date:str='';source:str=Field(min_length=10,max_length=60000);reason:str=Field(default='',max_length=500)
 class StageSet(Strict):
     stage:str=Field(default='',max_length=40)
+    reason:str=Field(default='',max_length=500)
+class ActivityReason(Strict):
+    reason:str=Field(default='',max_length=500)
 class ChangeReview(Strict):
     version:int
     action:str
     link_to:str=Field(default='',max_length=100)
+    reason:str=Field(default='',max_length=500)
 class ChangeEdit(Strict):
     version:int
     source_revision:int
@@ -595,11 +600,21 @@ class ChangeEdit(Strict):
     after:str=Field(min_length=1,max_length=1500)
     evidence:list[str]=Field(min_length=1,max_length=20)
 
+def queue_fields(m,history):
+    from work.v3.fast_ai import VERSION
+    return {'analysis_queued_at':stamp(),'analysis_started_at':None,'analysis_finished_at':None,'analysis_loading_seconds':0,'analysis_loading_started_at':None,'analysis_estimate':estimate_runtime(m['source'],history,VERSION)}
+
+
+def begin_reanalysis(w,c,m):
+    job=w.uid()
+    timing=queue_fields(m,[x for x in w.all_records(c,'meeting') if x['id']!=m['id']])
+    m.update(timing,v3_job=job,analysis_state='queued',analysis_phase='queued',error='',version=m['version']+1)
+    w.save(c,'meeting',m)
+    return job
+
+
 def build_router(w):
     r=APIRouter(prefix='/api/v3')
-    def queue_fields(m,history):
-        from work.v3.fast_ai import VERSION
-        return {'analysis_queued_at':stamp(),'analysis_started_at':None,'analysis_finished_at':None,'analysis_loading_seconds':0,'analysis_loading_started_at':None,'analysis_estimate':estimate_runtime(m['source'],history,VERSION)}
     @r.patch('/changes/{cid}')
     def edit_change(cid,body:ChangeEdit,actor=Depends(w.user)):
         from work.v17.changes import Change,validate_change,archive_record
@@ -611,6 +626,8 @@ def build_router(w):
                 raise HTTPException(409,'원문 또는 변경 기록이 바뀌었습니다. 최신 변경이력을 다시 열어 주세요.')
             if m.get('analysis_state') in ('queued','running'):
                 raise HTTPException(409,'회의록 분석이 끝난 뒤 수정해 주세요.')
+            if item.get('review_state')=='확인됨':
+                raise HTTPException(409,'확인을 취소한 뒤 변경 항목을 수정해 주세요.')
             # v3 uses inferred topic IDs, which are not legacy change_topic rows.
             payload=validate_change(w,c,Change(meeting_id=m['id'],source_revision=m['revision'],category=item['category'],effective_date=item['effective_date'],**body.model_dump(exclude={'source_revision'})),actor)
             topic_id=item.get('topic_id') if norm(item['title'])==norm(body.title) else None
@@ -625,7 +642,13 @@ def build_router(w):
         if body.action not in ('\ud655\uc778','\uc81c\uc678','\uac80\ud1a0 \uc804'):raise HTTPException(422,'\ud655\uc778\u00b7\uc81c\uc678\u00b7\uac80\ud1a0 \uc804 \uc911\uc5d0\uc11c \uace8\ub77c \uc8fc\uc138\uc694.')
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');item=w.read(c,'change_event',cid)
-            w.project(c,item['project_id'],actor,True);w.version(item,body.version)
+            p=w.project(c,item['project_id'],actor)
+            controlled=body.action=='검토 전' or (body.action=='제외' and item.get('review_state')=='확인됨')
+            if controlled:
+                require_lead(p,actor);reason_required(body.reason)
+            else:
+                w.project(c,item['project_id'],actor,True)
+            w.version(item,body.version)
             m=w.read(c,'meeting',item['meeting_id']);active(m)
             if item.get('superseded_by_revision') or item['source_revision']!=m['revision'] or m.get('analysis_stale'):
                 raise HTTPException(409,'\uc6d0\ubb38 \ub610\ub294 \ubcc0\uacbd \uae30\ub85d\uc774 \ubc14\ub01c\uc5c8\uc2b5\ub2c8\ub2e4. \ucd5c\uc2e0 \ubcc0\uacbd\uc774\ub825\uc744 \ub2e4\uc2dc \uc5f4\uc5b4 \uc8fc\uc138\uc694.')
@@ -642,6 +665,9 @@ def build_router(w):
             else:item.update(review_state='\uac80\ud1a0 \uc804',confirmed_by=None,confirmed_at=None)
             item.update(version=item['version']+1,human_edited=True,updated_at=w.now(),updated_by=actor['id'])
             w.save(c,'change_event',item)
+            if controlled:
+                record(w,c,p,'변경 항목 확인 취소' if body.action=='검토 전' else '변경 항목 제외',
+                       actor['id'],mid=m['id'],title=m['title'],detail=item['title'],reason=body.reason)
         return {**item,'context':change_context(item['quotes'],item['after'])}
     @r.get('/meetings/{mid}/line-boxes')
     def line_boxes(mid,actor=Depends(w.user)):
@@ -666,20 +692,23 @@ def build_router(w):
         return {'stages':STAGES,'manual':p.get('stage_manual') or None,'manual_by':p.get('stage_set_by'),'manual_at':p.get('stage_set_at'),'guess':guess,'per_meeting':per,'per_detail':detail,'ai_ready':llm.stage_available(),'rejudge':True,'build':'89','ai_missing':sum(1 for m in ms if detail[m['id']]['source']=='rule')}
     @r.post('/meetings/{mid}/stage')
     def set_meeting_stage(mid,body:StageSet,actor=Depends(w.user)):
-        """PM이 회의 하나의 단계를 직접 고친다. 빈 값이면 자동 판단으로 되돌린다."""
+        """팀장이 회의 하나의 단계를 직접 고친다. 빈 값이면 자동 판단으로 되돌린다."""
         if body.stage and body.stage not in STAGES:raise HTTPException(422,'단계를 다시 골라 주세요.')
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor)
-            if p.get('pm')!=actor['id']:raise HTTPException(403,'PM만 단계를 지정할 수 있습니다.')
+            active(m);require_lead(p,actor);reason_required(body.reason)
+            record(w,c,p,'회의 진행 단계 변경',actor['id'],mid=m['id'],title=m['title'],
+                   detail=(stage_of(m)['stage'] or '미지정')+' → '+(body.stage or '자동 판단'),reason=body.reason)
             m.update(stage_manual=body.stage or None,stage_manual_by=actor['id'],stage_manual_at=w.now());w.save(c,'meeting',m)
         return {'ok':True,'stage':m['stage_manual']}
     @r.post('/meetings/{mid}/stage-ai')
-    def stage_ai_one(mid,actor=Depends(w.user)):
-        """회의 하나의 단계를 AI로 다시 판단한다. PM이 직접 지정한 단계는 풀고 AI 판단으로 바꾼다."""
+    def stage_ai_one(mid,body:ActivityReason,actor=Depends(w.user)):
+        """회의 하나의 단계를 AI로 다시 판단한다. 팀장이 직접 지정한 단계는 풀고 AI 판단으로 바꾼다."""
         from work.v17 import llm
         if not llm.stage_available():raise HTTPException(503,'AI 실행 환경을 확인해 주세요. 실행.cmd로 서비스를 시작한 뒤 다시 시도해 주세요.')
         with w.connect() as c:
-            m=w.read(c,'meeting',mid);w.project(c,m['project_id'],actor,True);active(m)
+            m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m)
+            require_lead(p,actor);reason_required(body.reason)
             ms=sorted([x for x in w.all_records(c,'meeting') if x['project_id']==m['project_id'] and not x.get('deleted_at')],key=lambda x:(x.get('date') or '',x.get('created_at') or ''))
         i=next((k for k,x in enumerate(ms) if x['id']==mid),0)
         prev=stage_of(ms[i-1])['stage'] if i>0 else None
@@ -689,6 +718,11 @@ def build_router(w):
             c.execute('BEGIN IMMEDIATE');cur=w.read(c,'meeting',mid)
             active(cur)
             if cur.get('revision')!=m.get('revision'):raise HTTPException(409,'원문이 변경되었습니다. 최신 회의록으로 다시 판단해 주세요.')
+            if (cur.get('stage_manual'),cur.get('stage_manual_at'))!=(m.get('stage_manual'),m.get('stage_manual_at')):
+                raise HTTPException(409,'진행 단계가 바뀌었습니다. 다시 확인해 주세요.')
+            p=w.project(c,cur['project_id'],actor);require_lead(p,actor)
+            record(w,c,p,'회의 단계 AI 판단 반영',actor['id'],mid=cur['id'],title=cur['title'],
+                   detail=(stage_of(cur)['stage'] or '미지정')+' → '+a['stage'],reason=body.reason)
             cur['stage_ai']=a;cur['stage_manual']=None;w.save(c,'meeting',cur)
         return {'ok':True,'stage':a['stage']}
     @r.post('/projects/{pid}/stage-ai')
@@ -697,7 +731,7 @@ def build_router(w):
         from work.v17 import llm
         if not llm.stage_available():raise HTTPException(503,'AI 실행 환경을 확인해 주세요. 실행.cmd로 서비스를 시작한 뒤 다시 시도해 주세요.')
         with w.connect() as c:
-            w.project(c,pid,actor,True)
+            require_lead(w.project(c,pid,actor),actor)
             ms=sorted([m for m in w.all_records(c,'meeting') if m['project_id']==pid and not m.get('deleted_at')],key=lambda m:(m.get('date') or '',m.get('created_at') or ''))
         done=0;prev=None
         with w.AI_LOCK:
@@ -708,7 +742,8 @@ def build_router(w):
                     if a:
                         with w.connect() as c:
                             c.execute('BEGIN IMMEDIATE');cur=w.read(c,'meeting',m['id'])
-                            if cur.get('revision')==m.get('revision'):cur['stage_ai']=a;w.save(c,'meeting',cur);done+=1
+                            if cur.get('revision')==m.get('revision') and not cur.get('deleted_at'):
+                                cur['stage_ai']=a;w.save(c,'meeting',cur);done+=1
                 if a:prev=a['stage']
         return {'ok':True,'judged':done}
     @r.post('/projects/{pid}/stage')
@@ -716,7 +751,9 @@ def build_router(w):
         if body.stage and body.stage not in STAGES:raise HTTPException(422,'단계를 다시 골라 주세요.')
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');p=w.project(c,pid,actor)
-            if p.get('pm')!=actor['id']:raise HTTPException(403,'PM만 단계를 지정할 수 있습니다.')
+            require_lead(p,actor);reason_required(body.reason)
+            record(w,c,p,'프로젝트 진행 단계 변경',actor['id'],
+                   detail=(p.get('stage_manual') or '자동 판단')+' → '+(body.stage or '자동 판단'),reason=body.reason)
             p.update(stage_manual=body.stage or None,stage_set_by=actor['id'],stage_set_at=w.now());w.save(c,'project',p)
         return {'ok':True,'manual':p['stage_manual']}
     @r.get('/meetings/{mid}/change-boxes')
@@ -807,7 +844,7 @@ def build_router(w):
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m)
             if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 다시 분석할 수 있습니다.')
             if m['analysis_state'] in ('queued','running'):return {'ok':True}
-            job=w.uid();timing=queue_fields(m,[x for x in w.all_records(c,'meeting') if x['id']!=mid]);m.update(timing,v3_job=job,analysis_state='queued',analysis_phase='queued',error='',version=m['version']+1);w.save(c,'meeting',m)
+            job=begin_reanalysis(w,c,m)
         w.POOL.submit(run_analysis,w,mid,job);return {'ok':True}
     @r.get('/workspace')
     def workspace(actor=Depends(w.user)):
@@ -832,8 +869,13 @@ def build_router(w):
                 exact=source_wording(e,e['quotes'])
                 if exact:e['after_source']=exact
             meetings=[{k:m.get(k) for k in ('id','project_id','title','date','author','analysis_state','analysis_phase','analysis_stale','error','version','revision','created_at','warnings','source_type','filename')}|{'points':note_points(m),'metrics':m.get('metrics',{}),'progress':progress.get(m['id']),'approval':approval_summary(approvals[m['id']],current,m['revision']) if m['id'] in approvals else None} for m in ms]
+            pending_ids={e['meeting_id'] for e in es if e.get('review_state') not in ('확인됨','제외')}
+            for meeting in meetings:
+                raw=by[meeting['id']]
+                meeting['management_protected']=bool(raw.get('approved_revision') or meeting['id'] in approvals or
+                    raw.get('analysis_state')=='ready' and meeting['id'] not in pending_ids)
             archived=[{k:m.get(k) for k in ('id','title','project_id','deleted_at')} for m in w.all_records(c,'meeting') if m['project_id'] in ids and m.get('deleted_at') and actor['id'] in (m['author'],next(p['pm'] for p in ps if p['id']==m['project_id']))]
-            return {'user':actor,'people':w.all_records(c,'person'),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'7.0.0'}
+            return {'user':actor,'people':w.all_records(c,'person'),'projects':ps,'meetings':meetings,'archived':archived,'changes':es,'calendar':calendar_events(ms,es),'requirements':build_requirements(w,c,actor),'recent_batch':recent_batch([m for m in all_meetings if m['project_id'] in ids],actor['id']),'today':w.now()[:10],'can_create_project':w.can_create_project(c,actor),'version':'4.2-integrated'}
     @r.get('/search')
     def search(q:str=Query(default='',max_length=120),project_id:str='',actor=Depends(w.user)):
         terms=[norm(x) for x in q.split() if norm(x)]
@@ -873,21 +915,33 @@ def build_router(w):
     def edit_source(mid,body:SourceEdit,actor=Depends(w.user)):
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);active(m);w.version(m,body.version)
-            if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 수정할 수 있습니다.')
-            w.save_content(w,m,actor,body.title,body.date,body.source);m.update(analysis_stale=True);register_revision(m);w.save(c,'meeting',m)
-        return retry(mid,actor)
+            meeting_permission(w,c,p,m,actor)
+            if protected(w,c,m):reason_required(body.reason)
+            if not w.save_content(w,m,actor,body.title,body.date,body.source):return {'ok':True,'changed':False}
+            m['document_events'][-1]['note']=body.reason.strip()
+            m.update(analysis_stale=True);register_revision(m)
+            job=begin_reanalysis(w,c,m)
+        w.POOL.submit(run_analysis,w,mid,job)
+        return {'ok':True,'changed':True}
     @r.delete('/meetings/{mid}')
-    def trash(mid,actor=Depends(w.user)):
+    def trash(mid,body:ActivityReason|None=None,actor=Depends(w.user)):
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor)
-            if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 삭제할 수 있습니다.')
+            active(m);meeting_permission(w,c,p,m,actor)
+            reason=body.reason if body else ''
+            if protected(w,c,m):reason_required(reason)
+            record(w,c,p,'회의록 휴지통 이동',actor['id'],mid=mid,title=m['title'],reason=reason,kind='trash')
             m.update(deleted_at=w.now(),deleted_by=actor['id'],v3_job=w.uid(),version=m['version']+1);w.save(c,'meeting',m)
         return {'ok':True}
     @r.post('/meetings/{mid}/restore')
     def restore(mid,actor=Depends(w.user)):
         with w.connect() as c:
             c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor)
-            if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 PM이 복원할 수 있습니다.')
+            require_lead(p,actor)
+            if not m.get('deleted_at'):return {'ok':True}
+            if not any(e.get('meeting_id')==mid and e['kind']=='trash' for e in w.all_records(c,'management_event')):
+                record(w,c,p,'회의록 휴지통 이동',m.get('deleted_by'),mid=mid,title=m['title'],kind='trash',at=m['deleted_at'])
+            record(w,c,p,'회의록 복원',actor['id'],mid=mid,title=m['title'],kind='trash')
             m.pop('deleted_at',None);m.pop('deleted_by',None)
             if m['analysis_state'] in ('queued','running'):m.update(analysis_state='failed',error='복원되었습니다. 다시 분석해 주세요.')
             m['version']+=1;w.save(c,'meeting',m)

@@ -14,6 +14,11 @@ from work.v17.retrieval import document_lines
 LINEAR_SPEED = r'(?:라인|압연|이송|운전|생산)\s*속도'
 ROLE_WORD = re.compile(r'^(?:(?:담당(?:자)?|기한|누가|누구|언제)(?:이랑|하고|이며|와|과|이|가|은|는|을|를|의|도|까지|부터)?|(?:준비|제출|작성|내)(?:기|기로|해|하나요|하지|하기로|하는지|했어|해야|해야해|하기|할)?)$')
 REASON_REQUEST = re.compile(r'(?<![가-힣])왜(?=$|[^가-힣])|(?:이유|원인|사유)(?:가|은|는|를|도)?(?=$|[^가-힣])')
+DEGREE_CHANGE = re.compile(
+    r'(?<![\d.+-])(?P<value>[+-]?\d+(?:\.\d+)?)\s*(?:도(?:씨)?|℃|°(?:\s*c)?)\s*(?:으로|로)\s*'
+    r'(?:높이|올리|낮추|내리|바꾸|변경하|조정하)(?:려는|는|려고|기로|자는|자고)(?=$|[^가-힣])',
+    re.I,
+)
 CAUSAL_WORDING = re.compile(
     r'(?:이유|원인|사유)\s*(?:은|는|[:：])|때문|탓에|인해|인하여|따라|영향으로|여파로|바람에|이므로|'
     r'(?:없어|않아|못해|[가-힣]{2,}(?:해|돼|해서|하여|되어|돼서|어져|아져))(?=\s|[,.]|$)'
@@ -28,6 +33,10 @@ HOLD_WORDING = re.compile(r'보류(?:했|하였|함|했다|한다|하기로|되�
 REQUEST_OBSTACLE = re.compile(
     r'(?:요청|제안|검토).{0,12}(?:지만|으나|는데).{0,100}(?:없|부족|미비|미확보|미제출)'
 )
+
+
+def explicit_degree_reason(question):
+    return bool(REASON_REQUEST.search(question) and DEGREE_CHANGE.search(question))
 
 
 class ContentMeaning(BaseModel):
@@ -426,6 +435,12 @@ def prepare(question, projects, docs):
             result['search_terms']=[t for t in result['search_terms']
                 if not isinstance(t,str) or not ROLE_WORD.fullmatch(t)]
         if operation=='reason':
+            # Separate a direction verb from the amount it modifies. A query
+            # about raising a value does not require the noun "높이" in a record.
+            quantities = [m['value'] + '도' for m in DEGREE_CHANGE.finditer(result['question'])]
+            if quantities and not resolved['message']:
+                terms = resolve(DEGREE_CHANGE.sub(' ', result['question']),docs)['terms']
+                result['search_terms'] = terms + [value for value in dict.fromkeys(quantities) if value not in terms]
             result['search_terms']=[t for t in result['search_terms'] if t not in ('이유','원인','사유')
                                     and not (isinstance(t,str) and re.fullmatch(r'보류(?:했|됐|되었|하였|하|되)[가-힣]*',t))]
         if operation=='completion':

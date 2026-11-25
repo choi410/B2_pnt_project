@@ -3,6 +3,7 @@ import json, os
 from pathlib import Path
 from fastapi import APIRouter,Depends,HTTPException
 from work.v17.meeting_purge import Purge,cleanup_files,refers_to,file_values
+from work.v3.management import require_lead, reason_required, record
 
 
 def records(c):
@@ -41,23 +42,24 @@ def build_router(w):
     r=APIRouter(prefix='/api/v3')
     def item_info(c,kind,id,actor):
         d=w.read(c,kind,id);p=d if kind=='project' else w.read(c,'project',d['project_id'])
-        if actor['id'] not in p['members'] or actor['id'] not in (p['pm'],d.get('author')):raise HTTPException(403,'접근할 수 없는 항목입니다.')
+        if actor['id'] not in p['members']:raise HTTPException(403,'접근할 수 없는 항목입니다.')
+        require_lead(p,actor)
         if not d.get('deleted_at'):raise HTTPException(409,'휴지통으로 옮긴 뒤 영구 삭제할 수 있습니다.')
         if kind=='meeting' and p.get('deleted_at'):raise HTTPException(409,'프로젝트 휴지통에서 프로젝트 전체를 복원하거나 삭제해 주세요.')
         rows=records(c);targets,blocked=deletion_plan(rows,kind,d)
-        if actor['id']!=p['pm']:blocked='프로젝트 PM만 영구 삭제할 수 있습니다.'
         counts={k:sum(t[0]==k for t in targets) for k in ('meeting','change_event','task','report','import')}
         return d,rows,targets,{'id':id,'kind':kind,'title':d.get('title') or d.get('name'),'project_name':p['name'],'deleted_at':d['deleted_at'],'version':d.get('lifecycle_version',1) if kind=='project' else d['version'],'counts':counts,'blocked':blocked}
     @r.get('/trash')
     def trash(actor=Depends(w.user)):
+        if actor.get('level')!='leader':return {'meetings':[],'projects':[]}
         with w.connect() as c:
             ps={p['id']:p for p in w.all_records(c,'project',include_archived=True) if actor['id'] in p['members']}
             result={'meetings':[],'projects':[]}
             for p in ps.values():
-                if p.get('deleted_at') and p['pm']==actor['id']:result['projects'].append(item_info(c,'project',p['id'],actor)[3])
+                if p.get('deleted_at'):result['projects'].append(item_info(c,'project',p['id'],actor)[3])
             for m in w.all_records(c,'meeting',include_archived=True):
                 p=ps.get(m['project_id'])
-                if p and not p.get('deleted_at') and m.get('deleted_at') and actor['id'] in (p['pm'],m['author']):result['meetings'].append(item_info(c,'meeting',m['id'],actor)[3])
+                if p and not p.get('deleted_at') and m.get('deleted_at'):result['meetings'].append(item_info(c,'meeting',m['id'],actor)[3])
             for items in result.values():items.sort(key=lambda d:d['deleted_at'],reverse=True)
             return result
     @r.get('/trash/{kind}/{id}')
@@ -72,6 +74,7 @@ def build_router(w):
             with w.connect() as c:
                 c.execute('BEGIN IMMEDIATE');d,rows,targets,info=item_info(c,kind,id,actor)
                 if not body.confirmed:raise HTTPException(422,'영구 삭제 범위를 확인해 주세요.')
+                reason_required(body.reason)
                 if body.version!=info['version']:raise HTTPException(409,'상태가 바뀌었습니다. 휴지통을 다시 열어 주세요.')
                 if info['blocked']:raise HTTPException(409,info['blocked'])
                 owned={Path(n).resolve() for k,i,x in rows if (k,i) in targets for n in paths_in(x)}
@@ -84,6 +87,9 @@ def build_router(w):
                         target=root/('.purge-'+token+'-'+str(index));os.replace(path,target);staged.append((path,target))
                 for k,i in targets:c.execute('DELETE FROM records WHERE kind=? AND id=?',(k,i))
                 pid=d['id'] if kind=='project' else d['project_id']
+                project=d if kind=='project' else w.read(c,'project',pid)
+                record(w,c,project,'프로젝트 영구 삭제' if kind=='project' else '회의록 영구 삭제',actor['id'],
+                       mid=id if kind=='meeting' else None,title=info['title'],kind='trash',reason=body.reason,retain=kind=='project')
                 if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rag_vectors'").fetchone():c.execute('DELETE FROM rag_vectors WHERE project_id=?',(pid,))
                 if staged:w.save(c,'purge_cleanup',{'id':token,'paths':[str(p) for _,p in staged]})
         except Exception as exc:

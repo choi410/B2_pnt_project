@@ -528,6 +528,7 @@ def build_router(w):
   with w.connect() as c:
    c.execute('BEGIN IMMEDIATE');item=w.read(c,'change_event',cid);w.project(c,item['project_id'],actor,True);w.version(item,body.version)
    if item.get('superseded_by_revision'):raise HTTPException(409,'최신 본문의 새 후보로 대체된 항목입니다. 최신 목록에서 검토해 주세요.')
+   if item['review_state']=='확인됨':raise HTTPException(409,'변경이력 화면에서 확인 취소 요청을 보내 주세요.')
    payload=validate(c,body,actor)
    if payload['project_id']!=item['project_id']:raise HTTPException(422,'다른 프로젝트로 옮길 수 없습니다.')
    archive_record(w,item,actor,'수정')
@@ -539,6 +540,8 @@ def build_router(w):
    c.execute('BEGIN IMMEDIATE');item=w.read(c,'change_event',cid);p=w.project(c,item['project_id'],actor,True);w.version(item,body.version)
    if item.get('superseded_by_revision'):raise HTTPException(409,'최신 본문의 새 후보로 대체된 항목입니다. 최신 목록에서 검토해 주세요.')
    if item['review_state']=='확인됨' and body.action=='confirm':raise HTTPException(409,'이미 확인된 기록입니다.')
+   if body.action=='restore' or (body.action=='exclude' and item['review_state']=='확인됨'):
+    raise HTTPException(409,'변경이력 화면에서 처리 사유를 남겨 주세요.')
    if body.action=='exclude':
     if item['review_state']=='제외':raise HTTPException(409,'이미 제외한 기록입니다.')
     archive_record(w,item,actor,'제외');item['review_state']='제외'

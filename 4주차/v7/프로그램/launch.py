@@ -39,7 +39,8 @@ def environment():
         B2_ANALYSIS_CACHE_DIR=str(DATA / 'analysis-cache'), B2_MODEL_RESULTS=str(DATA / 'model-results'),
         B2_MODEL_BASE=str(MODEL_FILES / 'base'),
         B2_EMBEDDING_MODEL_DIR=str(MODEL_FILES / 'multilingual-e5-small'),
-        B2_LLAMA_DISABLE='1', B2_CHAT_SEMANTIC='0', B2_CHAT_SHIPMENT_INTENT='1', MAIL_MODE='console',
+        B2_LLAMA_DISABLE='1', B2_CHAT_SEMANTIC='0', B2_CHAT_SHIPMENT_INTENT='1', B2_CHAT_GENERAL='1',
+        MAIL_MODE='console',
     )
     return env
 

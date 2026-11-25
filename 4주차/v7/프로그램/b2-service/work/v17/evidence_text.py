@@ -13,6 +13,7 @@ STOP += ['기록된']
 TOPIC_REFERENCE = re.compile(
     r'(?<![가-힣a-zA-Z0-9])(?:(?:그|이)(?:건|거|것)|(?:그|이|해당)\s*(?:일|업무|작업))'
     r'(?:은|는|을|를|이|가|의|도)?(?=$|[^가-힣a-zA-Z0-9])')
+DEGREE_TERM = re.compile(r'(?P<value>[+-]?\d+(?:\.\d+)?)도')
 
 
 def normalize_request(question):
@@ -55,7 +56,14 @@ def topic_terms(question):
 
 def coverage(text, terms):
     value=normalized(text)
-    return sum(any(v in value for v in t) if isinstance(t,(list,tuple)) else t in value for t in terms)/max(1,len(terms))
+    def matches(term):
+        degree = DEGREE_TERM.fullmatch(term)
+        if degree:
+            # Match the quantity as written, not the tail of 190 or 0.90.
+            number = re.escape(degree['value'])
+            return bool(re.search(r'(?<![\d.+-])' + number + r'\s*(?:도|℃|°(?:\s*c)?)', text, re.I))
+        return term in value
+    return sum(any(matches(v) for v in t) if isinstance(t,(list,tuple)) else matches(t) for t in terms)/max(1,len(terms))
 
 
 def content_line(text, question=''):

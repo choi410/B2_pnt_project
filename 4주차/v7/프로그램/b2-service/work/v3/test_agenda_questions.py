@@ -168,3 +168,27 @@ def test_source_invalidated_after_deletion(client, monkeypatch):
     with w.connect() as db: m['deleted_at'] = w.now(); w.save(db, 'meeting', m)
     assert c.get('/api/questions/' + job['id']).json()['state'] == 'failed'
     assert c.get('/api/questions/' + job['id'] + '/sources/S1').status_code == 409
+
+
+def test_followup_reads_all_recorded_decisions_from_selected_meeting(client, monkeypatch):
+    from work.v3.test_conversations import send
+    c,_ = client
+    p = project(c,'새해솔 검사 장비')
+    kept = '시험 압력은 2.5 kPa로 유지한다.'
+    approved = 'FAT 일정은 2026.09.18 본사로 결정했다.'
+    pending = '측정 오차 원인은 다음 회의에서 결정한다.'
+    chosen = meeting(c,p,'결정 사항\n'+'\n'.join([kept,approved,pending]),'2026-08-17')
+    meeting(c,p,'결정 사항\n시험 압력은 3.8 kPa로 확정했다.','2026-09-01')
+    monkeypatch.setattr(questions,'generate',lambda *a,**kw:pytest.fail('Read decisions from the selected original meeting'))
+    thread = send(c,'2026년 8월 회의록 보여줘')
+    thread = send(c,'그 회의에서 합의한 내용은?',cid=thread['id'])
+    message = thread['messages'][-1]
+    result = message['result']
+    answer = result['points'][0]['text']
+    assert all(text.rstrip('.') in answer for text in (kept,approved))
+    assert '측정 오차' not in answer and '3.8' not in answer
+    proof = c.get(f"/api/conversations/{thread['id']}/messages/{message['id']}/sources/{result['sources'][0]['id']}")
+    assert proof.status_code==200
+    payload = proof.json()
+    assert payload['meeting_id']==chosen['id']
+    assert [row['text'] for row in payload['lines'] if row['id'] in payload['highlight']]==[kept,approved]

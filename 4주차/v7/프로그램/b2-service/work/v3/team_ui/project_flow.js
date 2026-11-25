@@ -543,12 +543,6 @@ workflow.StageBar = function (X, pid, mini) {
     f = this.flowFor(X, pid),
     cur = f ? f.manual || (f.guess && f.guess.stage) || null : null,
     ci = S.indexOf(cur),
-    pm =
-      (
-        X.u.projects.find(function (q) {
-          return q.id === pid;
-        }) || {}
-      ).pm === X.u.user.id,
     cls = function (i) {
       return (
         "pf-st st" +
@@ -627,7 +621,7 @@ workflow.StageBar = function (X, pid, mini) {
               {
                 className: "pf-tag",
               },
-              "PM 지정",
+              "담당자 지정",
             )
           : cur
             ? E(
@@ -666,52 +660,13 @@ workflow.StageBar = function (X, pid, mini) {
             "최근 회의록에 단계를 가르는 표현이 뚜렷하지 않아 판단을 보류했습니다.",
           )
         : null,
-      pm && f && !f.local
-        ? E(
-            "select",
-            {
-              className: "pf-stagesel",
-              "aria-label": "단계 지정",
-              value: f.manual || "",
-              onChange: function (ev) {
-                var v = ev.target.value;
-                X.Ca(async function () {
-                  await X.Q("/v3/projects/" + pid + "/stage", "POST", {
-                    stage: v,
-                  });
-                  delete workflow.flows[pid];
-                  X.o(function (y) {
-                    return Object.assign({}, y);
-                  });
-                });
-              },
-            },
-            E(
-              "option",
-              {
-                value: "",
-              },
-              "자동 추정 사용",
-            ),
-            S.map(function (s) {
-              return E(
-                "option",
-                {
-                  key: s,
-                  value: s,
-                },
-                s + "(으)로 지정",
-              );
-            }),
-          )
-        : null,
-      pm && f && f.local
+      f && f.local
         ? E(
             "small",
             {
               className: "muted pf-stagesel",
             },
-            "PM 단계 지정은 서버 재시작 후 사용할 수 있습니다.",
+            "진행 단계 변경은 서버 재시작 후 사용할 수 있습니다.",
           )
         : null,
     ),
@@ -901,10 +856,10 @@ workflow.Flow = function (X) {
     cur = (sd && sd.stage) || pcur,
     ci = sIdx(cur),
     pci = sIdx(pcur),
-    runJudge = function (url) {
+    runJudge = function (url, reason) {
       H.judging = pid;
       re();
-      X.Q(url, "POST")
+      X.Q(url, "POST", reason ? {reason: reason} : undefined)
         .then(function () {
           H.judging = null;
           self.flows[pid] = null;
@@ -920,7 +875,7 @@ workflow.Flow = function (X) {
     auto = (function () {
       H.autoJ = H.autoJ || {};
       if (
-        f.ai_ready &&
+        u.user.level === "leader" && f.ai_ready &&
         f.ai_missing > 0 &&
         !H.judging &&
         H.autoJ[pid] !== f.ai_missing
@@ -933,7 +888,7 @@ workflow.Flow = function (X) {
       return null;
     })(),
     reBtn =
-      f.rejudge && f.ai_ready && sel && H.judging !== pid
+      u.user.level === "leader" && f.rejudge && f.ai_ready && sel && H.judging !== pid
         ? E(
             "button",
             {
@@ -941,10 +896,12 @@ workflow.Flow = function (X) {
               className: "rv-btn pf-aibtn",
               disabled: !!H.stageSaving,
               title:
-                "이 회의의 단계를 AI로 다시 판단합니다. PM이 직접 지정한 단계는 풀립니다.",
+                "이 회의의 단계를 AI로 다시 판단합니다. 팀장이 직접 지정한 단계는 풀립니다.",
               onClick: function () {
+                var reason = window.prompt("회의 진행 단계를 다시 판단하는 사유를 입력해 주세요.");
+                if (!reason || !reason.trim()) return;
                 H.judgeErr = "";
-                runJudge("/v3/meetings/" + sel.id + "/stage-ai");
+                runJudge("/v3/meetings/" + sel.id + "/stage-ai", reason.trim());
               },
             },
             "다시 판단",
@@ -962,7 +919,7 @@ workflow.Flow = function (X) {
             }),
             "AI가 단계를 판단하는 중… 회의 1건에 3~4초 걸립니다",
           )
-        : f.ai_ready && f.ai_missing > 0
+        : u.user.level === "leader" && f.ai_ready && f.ai_missing > 0
           ? E(
               "button",
               {
@@ -994,7 +951,7 @@ workflow.Flow = function (X) {
               sd.source === "ai"
                 ? "AI 판단"
                 : sd.source === "pm"
-                  ? "PM 지정"
+                  ? "담당자 지정"
                   : "키워드 추정",
             ),
             pcur && pcur !== sd.stage ? " · 프로젝트 최근 단계: " + pcur : "",
@@ -1006,13 +963,7 @@ workflow.Flow = function (X) {
             },
             sel ? "이 회의는 단계를 판단하지 못했습니다" : "단계 판단 보류",
           ),
-    isPm =
-      (
-        u.projects.find(function (x) {
-          return x.id === pid;
-        }) || {}
-      ).pm === u.user.id,
-    canEditStage = isPm && sel && f.per_detail && !f.local,
+    canEditStage = X.requestStage && sel && f.per_detail && !f.local,
     stageEdit =
       canEditStage && H.stageEdit &&
       H.stageEdit.pid === pid && H.stageEdit.mid === sel.id
@@ -1028,23 +979,9 @@ workflow.Flow = function (X) {
     saveStage = function () {
       var edit = stageEdit;
       if (!edit || H.stageSaving || H.judging === pid) return;
-      H.stageSaving = true;
-      edit.error = "";
+      H.stageEdit = null;
+      X.requestStage(sel, S, sd && sd.stage, edit.stage);
       re();
-      X.Q("/v3/meetings/" + edit.mid + "/stage", "POST", {
-        stage: edit.stage,
-      })
-        .then(function () {
-          if (self.flows[edit.pid]) self.flows[edit.pid].key = "";
-          if (H.stageEdit === edit) H.stageEdit = null;
-        })
-        .catch(function (error) {
-          edit.error = error.message || "단계를 저장하지 못했습니다. 다시 시도해 주세요.";
-        })
-        .finally(function () {
-          H.stageSaving = false;
-          re();
-        });
     },
     fix =
       canEditStage
@@ -1174,9 +1111,8 @@ workflow.Flow = function (X) {
             E("button", {
               type: "button", className: "pf-stage-save", disabled: !!H.stageSaving || H.judging === pid,
               onClick: saveStage,
-            }, H.stageSaving ? "저장 중…" : "단계 저장"),
+            }, u.user.level === "leader" ? "단계 변경" : "단계 변경 요청"),
           ),
-          stageEdit.error ? E("p", { role: "alert" }, stageEdit.error) : null,
         )
       : null,
     E(
@@ -1803,6 +1739,20 @@ workflow.Flow = function (X) {
                 {
                   className: "actions",
                 },
+                canEditStage
+                  ? E(
+                      "button",
+                      {
+                        type: "button",
+                        className: "button",
+                        onClick: function () {
+                          var stage = (sd && sd.stage) || "";
+                          X.requestStage(sel, S, stage, stage);
+                        },
+                      },
+                      u.user.level === "leader" ? "회의 단계 변경" : "회의 단계 변경 요청",
+                    )
+                  : null,
                 E(
                   "button",
                   {

@@ -91,18 +91,18 @@ def test_connected_registration_analysis_and_restore(client,monkeypatch):
     found=c.get('/api/v3/search',params={'q':'배치도','project_id':pid}).json()
     assert [r['id'] for r in found['items']]==[mid]
     assert '배치도' in found['items'][0]['excerpts'][0]['text']
-    assert c.delete('/api/v3/meetings/'+mid).status_code==200
+    assert c.request('DELETE','/api/v3/meetings/'+mid,json={'reason':'삭제 검증'}).status_code==200
     data=c.get('/api/v3/workspace').json()
     assert not any(e['meeting_id']==mid for e in data['calendar']+data['changes'])
     assert any(m['id']==mid for m in data['archived'])
     assert c.post('/api/v3/meetings/'+mid+'/restore').status_code==200
     assert any(e['meeting_id']==mid for e in c.get('/api/v3/workspace').json()['changes'])
-    # Project trash preserves linked records and restricts the operation to the PM.
+    # Project trash preserves linked records and restricts the operation to the team lead.
     version=c.get('/api/projects/'+pid+'/trash-preview').json()['version']
     c.post('/api/demo-login',json={'username':'team2'})
-    assert c.post('/api/projects/'+pid+'/trash',json={'version':version}).status_code==403
+    assert c.post('/api/projects/'+pid+'/trash',json={'version':version,'reason':'휴지통 이동 검증'}).status_code==403
     c.post('/api/demo-login',json={'username':'team1'})
-    assert c.post('/api/projects/'+pid+'/trash',json={'version':version}).status_code==200
+    assert c.post('/api/projects/'+pid+'/trash',json={'version':version,'reason':'휴지통 이동 검증'}).status_code==200
     assert not any(r['id']==mid for r in c.get('/api/v3/search',params={'q':'배치도'}).json()['items'])
     assert not any(e['meeting_id']==mid for e in c.get('/api/v3/workspace').json()['calendar'])
     archived=next(p for p in c.get('/api/project-trash').json() if p['id']==pid)
@@ -110,14 +110,14 @@ def test_connected_registration_analysis_and_restore(client,monkeypatch):
     assert any(r['id']==mid for r in c.get('/api/v3/search',params={'q':'배치도'}).json()['items'])
     # Revision change removes obsolete evidence immediately, before new inference.
     detail=c.get('/api/meetings/'+mid).json()
-    result=c.patch('/api/v3/meetings/'+mid+'/source',json={'version':detail['version'],'title':detail['title'],'date':detail['date'],'source':content+'\n추가 논의는 다음 회의에서 진행한다.'})
+    result=c.patch('/api/v3/meetings/'+mid+'/source',json={'version':detail['version'],'title':detail['title'],'date':detail['date'],'reason':'변경된 내용 반영','source':content+'\n추가 논의는 다음 회의에서 진행한다.'})
     assert result.status_code==202,result.text
     with w.connect() as db:
         doc=registered_document(w.read(db,'meeting',mid))
         assert doc['revision']==2 and '추가 논의' in doc['body']
     assert not any(e['meeting_id']==mid for e in c.get('/api/v3/workspace').json()['changes'])
     # A deleted queued meeting cannot be resurrected by a stale worker.
-    assert c.delete('/api/v3/meetings/'+mid).status_code==200
+    assert c.request('DELETE','/api/v3/meetings/'+mid,json={'reason':'삭제 검증'}).status_code==200
     fn,*args=queue.jobs.pop();fn(*args)
     assert not any(m['id']==mid for m in c.get('/api/v3/workspace').json()['meetings'])
     # Project membership still applies to the new endpoints.

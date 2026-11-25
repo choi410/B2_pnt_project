@@ -1,4 +1,5 @@
-"""Find dates explicitly attached to the requested inbound event in meeting text."""
+"""Find schedules explicitly attached to the requested event in meeting text."""
+from datetime import date
 import re
 
 from work.v3.query_intent import strip_labels
@@ -16,6 +17,10 @@ PARTICLE = r'(?:은|는|이|가|을|를)?'
 QUESTION = re.compile(
     rf'(?P<subject>.{{0,80}}?)\s*(?P<event>{EVENT})\s*(?P<field>{DATE_FIELD})?\s*{PARTICLE}\s*'
     r'(?P<ask>언제(?:야|예요|인가요|인지|였어|였지|로\s*정했어)?|알려\s*(?:줘|주세요)|확인해\s*(?:줘|주세요)|뭐야)?'
+)
+INSPECTION_QUESTION = re.compile(
+    rf'(?P<event>sat|fat)\s*(?:검수\s*)?(?P<field>{DATE_FIELD})?\s*{PARTICLE}\s*'
+    r'(?P<ask>언제(?:야|예요|인가요|인지|였어|였지)?|알려\s*(?:줘|주세요)|뭐야)?', re.I
 )
 PENDING = re.compile(r'미정|미확정|보류|취소|철회|연기|재협의|추후\s*(?:협의|확정|결정)|정해지지\s*않')
 OTHER_STAGE = re.compile(r'출하|출고|납품|납기|검수|설치|교육')
@@ -55,15 +60,48 @@ def _record_parts(text, event, terms):
                 break
 
 
-def answer(question, projects, docs, plan):
+def _inspection_parts(text, event):
+    # Schedule tables can render a row as "SAT 2027.05.12 오창공장" in a PDF.
+    # A heading such as "6차 회의 (SAT)" or the filename is not a schedule row.
+    stage = re.compile(rf'^(?:[-*•]\s*)?\b{event}\b\s*(?:검수\s*)?(?:{DATE_FIELD})?\s*{PARTICLE}\s*[:：]?\s*', re.I)
+    for part in PARTS.split(text):
+        hit = stage.match(part.strip())
+        if not hit:
+            continue
+        tail = hit.string[hit.end():]
+        if PENDING.match(tail):
+            yield part.strip()
+            continue
+        day = DATE.match(tail)
+        if not day or not day['month'] or DISCUSSION_DATE.match(tail[day.end():]):
+            continue
+        try:
+            date(int(day['year'] or 2000), int(day['month']), int(day['day']))
+        except ValueError:
+            continue
+        yield part.strip()
+
+
+def request(question, projects, plan):
     query = without_date_scope(strip_labels(question, projects), plan).strip(' ?!.')
-    intent = QUESTION.fullmatch(query)
+    query = re.sub(r'^프로젝트(?:에서|의)?\s+', '', query)
+    inspection = INSPECTION_QUESTION.fullmatch(query)
+    intent = inspection or QUESTION.fullmatch(query)
     if not intent or not (intent['ask'] or intent['field']):
         return None
-    subject, event = intent['subject'].strip(), intent['event']
+    subject = '' if inspection else intent['subject'].strip()
+    event = intent['event']
     if re.search(r'왜|이유|변경|비교|부터|까지|뒤|이후|기간|완료|실제|되면|출고|출하|반입|입고|각각|(?:와|과|하고|이랑)\s+', subject):
         return None
-    label = ' '.join(filter(None, (subject.upper() if re.fullmatch(r'[a-z]{2,8}', subject) else subject, event)))
+    return subject, event, bool(inspection)
+
+
+def answer(question, projects, docs, plan):
+    schedule = request(question, projects, plan)
+    if schedule is None:
+        return None
+    subject, event, inspection = schedule
+    label = event.upper() if inspection else ' '.join(filter(None, (subject.upper() if re.fullmatch(r'[a-z]{2,8}', subject) else subject, event)))
     points, sources = [], []
     for project in projects:
         scoped = [doc for doc in docs if doc['project_id'] == project['id']]
@@ -73,7 +111,8 @@ def answer(question, projects, docs, plan):
         matches = []
         for doc in scoped:
             hits = [(line, parts) for line in document_lines(doc) if content_line(line['text'])
-                    and (parts := list(_record_parts(line['text'], event, resolved['terms'])))]
+                    and (parts := list(_inspection_parts(line['text'], event) if inspection
+                                       else _record_parts(line['text'], event, resolved['terms'])))]
             if hits:
                 matches.append((doc, hits))
         if not matches:
@@ -90,7 +129,7 @@ def answer(question, projects, docs, plan):
             quotes = '\n'.join(f'“{part}”' for _, parts in hits for part in parts)
             points.append({'text':f'회의록에 적힌 {label} 일정이에요.\n{quotes}', 'sources':[sid],
                            'project_id':project['id'], 'project_name':project['name'], 'verification':'source_quote'})
-    return {'kind':'documents','mode':'inbound_schedule','answerable':bool(points),
+    return {'kind':'documents','mode':'inspection_schedule' if inspection else 'inbound_schedule','answerable':bool(points),
             'answer_mode':'source_quote' if points else 'no_evidence','points':points,'sources':sources,
             'message':'' if points else f'조회한 회의록에서 {label} 일정을 확인하지 못했어요.',
             'searched_projects':len(projects),'searched_meetings':len(docs),'notice':plan.get('notice','')}

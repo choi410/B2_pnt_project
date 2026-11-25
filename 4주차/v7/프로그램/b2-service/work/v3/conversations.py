@@ -166,6 +166,13 @@ def public_message(w, c, message, actor):
         result = deepcopy(job['result'])
         from work.v3.chat_presentation import present
         result=present(result)
+        if result.get('mode')=='change_project_choice':
+            from work.v3.chat_tools import ReadTools
+            current={p['id']:p for p in ReadTools(w,c,actor).projects()}
+            result['projects']=[{'id':pid,'name':current[pid]['name']} for p in result.get('projects',[])
+                                if (pid:=p['id']) in current]
+            if not result['projects']:
+                result['message']='현재 선택할 수 있는 프로젝트가 없어요.'
         result['sources'] = [{k: s[k] for k in ('id', 'project_id', 'project_name', 'title', 'date') if k in s}
                              for s in result.get('sources', [])]
         public['result'] = result
@@ -213,16 +220,18 @@ def build_router(w, question_router):
                 past = messages(w, c, thread['id']) if thread else []
                 if any(m['state'] not in TERMINAL for m in past):
                     raise HTTPException(409, '이 대화의 답변이 끝나면 이어서 질문해 주세요.')
-                from work.v3 import chat_interpreter as language
+                from work.v3 import chat_interpreter as language, general_chat
                 # Capability notices do not replace the last query scope.
-                notices = ('unsupported_action', 'shipment_total_unavailable', 'shipment_plan_unavailable', 'term_definition')
+                notices = ('unsupported_action', 'shipment_total_unavailable', 'shipment_plan_unavailable',
+                           'term_definition', *general_chat.PUBLIC_MODES)
                 query_history = [m for m in past if m.get('job', {}).get('result', {}).get('mode') not in notices]
+                public_history=general_chat.history(past) if general_chat.enabled() else []
                 previous=next((m for m in reversed(query_history) if m.get('job',{}).get('result',{}).get('mode') not in ('social','scope_explanation')),None)
                 from work.v3.conversation_context import explain_scope
                 legacy_shipment = None if language.shipment_intent_enabled() else policy.shipment_total_answer(question)
                 capability = legacy_shipment or language.record_management_response(question)
                 scope_answer=explain_scope(w,c,actor,question,previous) if not capability else None
-                social=language.english_restatement(question,past[-1] if past else None) or language.social(question)
+                social=(None if public_history else language.english_restatement(question,past[-1] if past else None)) or language.social(question)
                 from work.v3 import project_records
                 record_plan=project_records.intent(question) if not (capability or social or scope_answer) else None
                 project_answer=None
@@ -233,16 +242,21 @@ def build_router(w, question_router):
                     project_answer=({'query':question,'project_ids':ids,'project_id':ids[0] if fixed else None,
                                      'label':selected[0]['name'] if fixed else ''},result)
                 from work.v3.term_definition import requested_term
-                term=requested_term(question,language.available(w,c,actor),in_meeting=bool(body.meeting_id)) if not (capability or social or scope_answer or project_answer) else None
+                ps=language.available(w,c,actor)
+                mixed=(general_chat.comparison(question,ps,w.all_records(c,'project'))
+                       if general_chat.enabled() and not (capability or social or scope_answer or project_answer) else None)
+                term=requested_term(question,ps,in_meeting=bool(body.meeting_id)) if not (capability or social or scope_answer or project_answer) else None
+                if term and general_chat.enabled() and (mixed or public_history or general_chat.needs_public(question)):
+                    term=None
                 from work.v3 import semantic_chat
                 reference_ready=not (capability or term or project_answer) and bool(language.reference_lines(w,c,actor,question,previous,body.project_id))
-                local=capability or (scope_answer[1] if scope_answer else None if term or project_answer else language.local_response(question,previous,resolve_references=semantic_chat.enabled() or reference_ready))
+                local=capability or (scope_answer[1] if scope_answer else None if term or project_answer or mixed else language.local_response(question,previous,resolve_references=semantic_chat.enabled() or reference_ready))
                 from work.v3.conversation_values import resolve as resolve_values, resolve_test_width
                 from work.v3.task_followups import resolve as resolve_task
                 from work.v3.paired_followups import resolve as resolve_pair
                 from work.v3.change_queries import confirmed_delivery_projects
                 value_answer=project_answer
-                search_records=not (social or local or term or project_answer)
+                search_records=not (social or local or term or project_answer or mixed)
                 if search_records:
                     value_answer=resolve_task(w,c,actor,question,previous,body.project_id,body.meeting_id)
                     if value_answer is None:
@@ -251,7 +265,12 @@ def build_router(w, question_router):
                         value_answer=confirmed_delivery_projects(w,c,actor,question,previous,body.project_id,body.meeting_id)
                     if value_answer is None:
                         value_answer=resolve_values(w,c,actor,question,query_history,body.project_id,body.meeting_id)
-                if term:
+                if mixed:
+                    context=resolve_question(w,c,actor,mixed[0],previous,body.project_id,body.meeting_id)
+                    if not context.get('clarify') and len(context['project_ids'])!=1:
+                        context.update(clarify='어느 프로젝트의 사양을 비교할까요?',
+                                       projects=[{'id':p['id'],'name':p['name']} for p in ps if p['id'] in context['project_ids']])
+                elif term:
                     context = {'query': question, 'project_ids': [], 'label': '일반 용어 설명'}
                 elif capability:
                     context = {'query': question, 'project_ids': []}
@@ -263,23 +282,33 @@ def build_router(w, question_router):
                 if search_records and not semantic and not value_answer and not reference_ready:
                     local=language.local_response(question,previous)
                 prior_turn=next((m for m in reversed(past)
-                                 if m.get('job',{}).get('result',{}).get('mode') not in ('social','term_definition')),{})
+                                 if m.get('job',{}).get('result',{}).get('mode') not in
+                                 ('social','term_definition',*general_chat.PUBLIC_MODES)),{})
                 prior_shipment=prior_turn.get('context',{}).get('shipment',{})
                 shipment_probe=(search_records and not semantic and not local and not value_answer and not width_resolved
                                 and not reference_ready and language.shipment_intent_candidate(question,context,bool(prior_shipment))
-                                and not language.metadata_plan(question,language.available(w,c,actor)))
+                                and not language.metadata_plan(question,ps))
+                general=(search_records and not (body.project_id or body.meeting_id or local or value_answer
+                                                 or width_resolved or reference_ready or shipment_probe)
+                         and general_chat.candidate(question,ps,context,previous,public_history))
                 from work.v3.chat_state import pin_selection
-                if search_records and not local:pin_selection(w,c,actor,context)
+                if (search_records or mixed) and not local:pin_selection(w,c,actor,context)
             if social:
                 job={'id':w.uid(),'state':'done','scope_ids':[],'question':question,
                      'result':{'kind':'conversation','mode':'social','answerable':True,'message':social,'points':[],'sources':[]}}
             elif term:
                 from work.v3.chat_jobs import start
                 job=start(w,actor,question,previous,body.project_id,definition_term=term)
+            elif mixed and not context.get('clarify'):
+                from work.v3.chat_jobs import start
+                job=start(w,actor,question,previous,context['project_ids'][0],comparison=(context,mixed[1]))
             elif local:
                 job={'id':w.uid(),'state':'done','scope_ids':context['project_ids'] if scope_answer else [],'question':question,'result':local}
             elif value_answer:
                 job={'id':w.uid(),'state':'done','scope_ids':context['project_ids'],'question':question,'result':value_answer[1],'seconds':0}
+            elif general:
+                from work.v3.chat_jobs import start
+                job=start(w,actor,question,previous,general_history=public_history,interpret=interpret)
             elif semantic:
                 from work.v3.chat_jobs import start
                 job=start(w,actor,question,previous,body.project_id,body.meeting_id,semantic_past=query_history)
@@ -294,6 +323,8 @@ def build_router(w, question_router):
                 job = {'id': w.uid(), 'state': 'done', 'scope_ids': context['project_ids'],
                        'question': question, 'result': {'kind': 'documents' if context.get('empty_result') else 'clarification', 'answerable':False, 'message': context['clarify'],
                        'projects': context.get('projects', []), 'meetings': context.get('meetings', []), 'points': [], 'sources': []}}
+                if context.get('clarification_mode'):
+                    job['result']['mode']=context['clarification_mode']
             elif context.get('retrieval_plan'):
                 from work.v3.dialogue_plan import execute
                 with w.connect() as c:

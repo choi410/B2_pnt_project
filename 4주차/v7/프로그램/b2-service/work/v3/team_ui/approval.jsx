@@ -164,7 +164,7 @@ export default (function createApproval(React, api, Button, Modal, logo) {
         steps.push({
           k: h.id + "a",
           cls: "applied",
-          label: "PM 합의 반영",
+          label: "프로젝트 담당자 합의 반영",
           when: h.applied_at,
           text: "요청·보류 항목을 합의로 바꿨습니다.",
         });

@@ -168,6 +168,7 @@ def validate_meaning(points,sources,question=''):
     shared_terms=next((s['query_scope']['search_terms'] for s in sources if s.get('query_scope',{}).get('search_terms') is not None),None)
     scope=next((s.get('query_scope',{}) for s in sources),{})
     history=scope.get('operation')=='history' or scope.get('mode')=='history' or bool(re.search(r'이력|과정|경위',question))
+    decision=scope.get('operation')=='decision'
     def terms_for(text):return shared_terms if shared_terms is not None else topic_terms(text)
     # A matched alias does not license dropping the rest of the user's request
     # (e.g. asking a named component's price must not return its specification).
@@ -193,6 +194,7 @@ def validate_meaning(points,sources,question=''):
             # qualifications. In a timeline, the recorded decision is more
             # informative than a shorter note that only reopens the discussion.
             options.sort(key=lambda line:(coverage(line,terms),
+                decision and bool(re.search(DECISION+'|'+NEGATIVE+r'|유지(?:한다|했다|하기로|함)',line)),
                 history and any(coverage(part,terms)>=.5 and not re.search(NEGATIVE,part)
                                 and any(not match[0].endswith('된') for match in re.finditer(DECISION,part))
                                 for part in clauses(line)),

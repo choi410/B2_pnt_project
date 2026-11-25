@@ -1,16 +1,19 @@
-"""Reversible, PM-only project archive. Children retain their independent state."""
+"""Reversible, team lead only project archive. Children retain their independent state."""
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from work.v3.management import require_lead, reason_required
 
 class Version(BaseModel):
  model_config=ConfigDict(extra='forbid')
  version:int
+ reason: str = Field(default='', max_length=500)
 
 def build_router(w):
  r=APIRouter(prefix='/api')
  def owned(c,pid,actor):
   p=w.read(c,'project',pid)
-  if p['pm']!=actor['id'] or actor['id'] not in p['members']:raise HTTPException(403,'이 프로젝트의 PM만 삭제·복구할 수 있습니다.')
+  if actor['id'] not in p['members']:raise HTTPException(403,'이 프로젝트에 접근할 수 없습니다.')
+  require_lead(p,actor)
   return p
  def counts(c,pid):
   return {'meetings':sum(x['project_id']==pid for x in w.all_records(c,'meeting')),
@@ -19,7 +22,7 @@ def build_router(w):
  @r.get('/project-trash')
  def trash(actor=Depends(w.user)):
   with w.connect() as c:
-   items=[{'id':p['id'],'name':p['name'],'deleted_at':p['deleted_at'],'version':p.get('lifecycle_version',1)} for p in w.all_records(c,'project',include_archived=True) if p.get('deleted_at') and p['pm']==actor['id'] and actor['id'] in p['members']]
+   items=[{'id':p['id'],'name':p['name'],'deleted_at':p['deleted_at'],'version':p.get('lifecycle_version',1)} for p in w.all_records(c,'project',include_archived=True) if p.get('deleted_at') and actor.get('level')=='leader' and actor['id'] in p['members']]
   return sorted(items,key=lambda p:p['deleted_at'],reverse=True)
  @r.get('/projects/{pid}/trash-preview')
  def preview(pid,actor=Depends(w.user)):
@@ -33,13 +36,14 @@ def build_router(w):
    if p.get('lifecycle_version',1)!=body.version:raise HTTPException(409,'프로젝트 상태가 바뀌었습니다. 목록을 다시 열어 주세요.')
    if bool(p.get('deleted_at'))!=restore:raise HTTPException(409,'프로젝트의 현재 상태를 다시 확인해 주세요.')
    if not restore:
+    reason_required(body.reason)
     meetings=[m for m in w.all_records(c,'meeting') if m['project_id']==pid]
     drafts=[d for d in w.all_records(c,'import') if d.get('chosen_project')==pid]
     jobs=[j for j in w.all_records(c,'context_draft') if j.get('project_id')==pid]
     if any(x.get(k) in ('queued','running') for x in meetings+drafts+jobs for k in ('analysis_state','change_scan_state','state')):
      raise HTTPException(409,'이 프로젝트의 AI 분석이 진행 중입니다. 분석이 끝난 뒤 휴지통으로 옮겨 주세요.')
    p.update(deleted_at=None if restore else w.now(),deleted_by=None if restore else actor['id'],lifecycle_version=body.version+1)
-   p.setdefault('lifecycle_events',[]).append({'at':w.now(),'by':actor['id'],'action':'restore' if restore else 'trash'})
+   p.setdefault('lifecycle_events',[]).append({'at':w.now(),'by':actor['id'],'action':'restore' if restore else 'trash','reason':body.reason.strip()})
    w.save(c,'project',p)
   return {'ok':True}
  @r.post('/projects/{pid}/trash')

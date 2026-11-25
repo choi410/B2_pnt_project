@@ -499,6 +499,13 @@ established content retrieval is not burdened with another model call.
     if context.get('date_scope_error'):return False
     if context.get('point_followup'):return not context.get('clarify')
     ps=available(w,c,actor)
+    if context.get('retrieval_plan') and not context.get('clarify'):return False
+    if not context.get('clarify'):
+        from work.v3.content_query import explicit_degree_reason
+        from work.v3.inbound_schedule import request as schedule_request
+        selected=[p for p in ps if p['id'] in context.get('project_ids',[])]
+        if schedule_request(context['query'],selected,context.get('time_scope',{})):return False
+        if len(selected)==1 and explicit_degree_reason(context['query']):return False
     if not (context.get('scope_override') and context.get('operation')) and content_scope_candidate(
             question,memory(w,c,actor,previous),policy.name_matches(ps,question),context):return True
     if reference_lines(w,c,actor,question,previous,context.get('project_id')):return True
@@ -520,7 +527,6 @@ established content retrieval is not burdened with another model call.
     if context.get('projects') or context.get('meetings'):return False
     if context.get('meeting_ids'):return False
     if context.get('retrieval_plan'):
-        if not context.get('clarify'):return False
         # An unresolved replacement can still name a valid project. Let the
         # bounded classifier decide the relation; do not lose the old plan.
         if record_context and policy.name_matches(ps,question) and not re.search(r'삭제|복원|수정|등록|권한|생산일|착수일|완료된|진행\s*중|우리\s*팀',question):return True

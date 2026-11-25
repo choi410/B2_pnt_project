@@ -127,7 +127,9 @@ def build_router(w):
   job=None
   with w.connect() as c:
    c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);w.version(m,body.version)
-   if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'작성자 또는 프로젝트 PM이 수정할 수 있습니다.')
+   from work.v3.management import meeting_permission, protected
+   meeting_permission(w,c,p,m,actor)
+   if protected(w,c,m):raise HTTPException(409,'회의록 정정 화면에서 사유를 남겨 주세요.')
    if save_content(w,m,actor,body.title,body.meeting_date,body.body):
     mark_registered(w,m,actor);job=prepare_scan(w,m)
     registration_notice(w,c,m,actor['id'])

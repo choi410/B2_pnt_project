@@ -127,16 +127,24 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
     context={'query':question,'project_id':None,'project_ids':[],'meeting_ids':[],
              'subject':'변경 기록','label':'','time_scope':{},'scope_override':True,'change_request':True}
     def stop(text,choices=()):
-        return {**context,'clarify':text,'projects':[{'id':p['id'],'name':p['name']} for p in choices]}
+        return {**context,'clarify':text,'projects':[{'id':p['id'],'name':p['name']} for p in choices],
+                **({'clarification_mode':'change_project_choice'} if choices else {})}
     reference=result.get('mode') in MODES
     previous_ids=[pid for pid in result.get('result_project_ids',[]) if pid in by_id] if reference else []
     all_projects=bool(re.search(r'(?:전체|모든|각)\s*프로젝트|프로젝트\s*별',q))
     others=bool(re.search(r'(?:다른|나머지)\s*프로젝트',q))
+    pinned=old.get('input_scope',{}).get('project_id') or old.get('exploration',{}).get('pinned_id')
+    if not pinned and (previous or {}).get('state')=='done' and result.get('answerable'):
+        previous_named=policy.name_matches(ps,(previous or {}).get('question',''))
+        if len(previous_named)==1 and old.get('project_ids')==[previous_named[0]['id']]:
+            pinned=previous_named[0]['id']
     if project_id:selected=[w.project(c,project_id,actor)]
     elif named:selected=named
     elif others and reference:selected=[p for p in ps if p['id'] not in previous_ids]
     elif all_projects:selected=ps
     elif reference:selected=[by_id[pid] for pid in previous_ids]
+    elif not others and pinned in by_id and old.get('project_ids')==[pinned]:selected=[by_id[pinned]]
+    elif not others and len(ps)==1:selected=ps
     else:return stop('어느 프로젝트의 변경 기록을 볼까요?',ps)
     if not selected:return stop('앞 답변의 프로젝트에 현재 열람할 수 있는 변경 기록이 없어요.')
     if len(selected)>1 and not (all_projects or others or re.search(r'둘\s*다|두\s*개\s*다|각각',q)):
@@ -184,6 +192,8 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,for
 
 
 def execute(w,c,actor,context):
+    from work.v3.service import topic_key
+
     query=context['change_query'];projects=[w.project(c,pid,actor) for pid in query['project_ids']]
     by_id={p['id']:p for p in projects};events,meetings=ReadTools(w,c,actor).changes([p['id'] for p in projects])
     scope=query.get('time_scope') or {};states=query.get('states',[])
@@ -201,14 +211,17 @@ def execute(w,c,actor,context):
         sid='S'+str(len(sources)+1) if source else None
         if source:sources.append(dict(source,id=sid,exact_highlights=source['line_ids']))
         state='합의' if e.get('business_state')=='확정' else e.get('business_state') or '미정'
-        item={'id':e['id'],'project_id':p['id'],'project_name':p['name'],'date':m.get('date',''),
-              'title':e.get('title') or '제목 없음','state':state,'before':e.get('before',''),'after':e.get('after',''),
+        title=e.get('title') or '제목 없음'
+        topic=topic_key({**e,'category':e.get('category') or '', 'title':title}) if e.get('title') else e['id']
+        item={'id':e['id'],'project_id':p['id'],'project_name':p['name'],'date':m.get('date',''),'topic_id':topic,
+              'title':title,'state':state,'before':e.get('before') or '','after':e.get('after') or '',
               'review_state':e.get('review_state','검토 전'),'source_id':sid}
         items.append(item)
         value=(item['before']+' → ' if item['before'] else '')+item['after']
         points.append({'project_id':p['id'],'project_name':p['name'],'text':f'{item["date"]} · {item["title"]} · {state}\n{value}','sources':[sid] if sid else []})
     label=projects[0]['name'] if len(projects)==1 else f'{len(projects)}개 프로젝트'
     return {'kind':'metadata','mode':'change_history','answerable':True,'message':f'{label}의 변경 기록은 {len(items)}건이에요.',
+            'direction':query.get('direction','oldest'),
             'count':len(items),'result_project_ids':[p['id'] for p in projects],
             'points':points,'sources':sources,'change_items':items,
             'notice':'변경이력에 등록된 기록 · 회의일 '+('최신순' if query.get('direction')=='newest' else '오래된순')+

@@ -298,9 +298,9 @@ def trace_job(jid,stage,**values):
  logging.getLogger('uvicorn.error').info('b2_question_trace %s',json.dumps({'job':jid,**entry},ensure_ascii=False))
 
 
-def answer_job(w,jid,policy=None):
+def answer_job(w,jid,policy=None,*,comparison=None,started=None):
  with LOCK:job=deepcopy(JOBS[jid])
- started=time.perf_counter()
+ started=time.perf_counter() if started is None else started
  try:
   update(jid,state='searching')
   with w.connect() as c:
@@ -336,6 +336,7 @@ def answer_job(w,jid,policy=None):
    with w.connect() as c:job_projects(w,c,job,actor)
    update(jid,state='done',result=result,corpus=expected,seconds=round(time.perf_counter()-started,1));return
   found=[];requested_targets=[];answered_targets=set()
+  retrieval_started=time.perf_counter()
   for p in projects:
    project_docs=[d for d in docs if d['project_id']==p['id']]
    if project_docs:
@@ -380,6 +381,8 @@ def answer_job(w,jid,policy=None):
   sources.sort(key=lambda s:(*group_key(s),s['date'],s['meeting_id']))
   for i,s in enumerate(sources):s['id']='S'+str(i+1)
   trace('selected',sources=source_trace(sources))
+  trace('workspace_lookup',elapsed_ms=round((time.perf_counter()-retrieval_started)*1000))
+  answer_started=time.perf_counter()
   if not sources:
    message='해당 날짜 범위의 등록된 회의 자료에서 확인하지 못했습니다.' if not docs and (plan.get('start') or plan.get('end')) else '선택한 범위에 검색할 등록 회의록이 없습니다. 회의록을 등록한 뒤 질문해 주세요.' if not docs else '등록된 회의록에서 질문에 맞는 근거를 찾지 못했습니다. 항목명이나 조회 기간을 확인해 주세요.'
    result={'kind':'documents','answerable':False,'points':[],'sources':[],'message':message}
@@ -397,7 +400,10 @@ def answer_job(w,jid,policy=None):
     checked=[];evidence_attempted=False;raw={}
     if policy and hasattr(policy,'validate_meaning') and not agenda:
      from work.v3.content_query import early_evidence
-     checked,evidence_attempted=early_evidence(w,content_question,group,docs,trace)
+     if comparison is not None and group[0].get('query_scope',{}).get('operation')=='decision':
+      checked=policy.validate_meaning([],group,content_question)
+     if not checked:
+      checked,evidence_attempted=early_evidence(w,content_question,group,docs,trace)
     if checked:
      trace('answer_route',route='evidence_first',generation_skipped=True)
     elif reason:
@@ -453,9 +459,13 @@ def answer_job(w,jid,policy=None):
   quotes=sum(p.get('verification')=='source_quote' for p in result.get('points',[]))
   result['answer_mode']='no_evidence' if not result.get('answerable') else 'source_quote' if quotes==len(result.get('points',[])) else 'mixed' if quotes else 'grounded_summary'
   trace('result',answerable=result.get('answerable'),answer_mode=result['answer_mode'],used_sources=[s['id'] for s in result.get('sources',[])])
+  trace('workspace_answer',elapsed_ms=round((time.perf_counter()-answer_started)*1000))
   with w.connect() as c:
    job_projects(w,c,job,actor)
    if not same_corpus(w,c,job['scope_ids'],expected):raise ValueError('답변을 만드는 동안 회의록이 변경되었습니다. 최신 자료로 다시 질문해 주세요.')
+  if comparison is not None:
+   from work.v3.general_chat import with_comparison
+   result=with_comparison(result,comparison)
   update(jid,state='done',result=result,corpus=expected,seconds=round(time.perf_counter()-started,1))
  except HTTPException as exc:update(jid,state='failed',error=str(exc.detail))
  except Exception as exc:
@@ -492,7 +502,7 @@ def build_router(w,policy=None):
     plan['meeting_ids']=list(wanted)
    quick=policy.quick_answer(w,c,projects,actor,question,body.project_id or body.project_ids,plan) if policy else None
    signature=baseline_questions.signature(w,c,[p['id'] for p in projects]) if quick and quick.get('mode')=='baseline' else None
-   quick_corpus=[(d['meeting_id'],d['fingerprint']) for d in corpus(w,c,[p['id'] for p in projects])] if quick and quick.get('mode') in ('meeting_search','recorded_status','project_usage','project_summary') else None
+   quick_corpus=[(d['meeting_id'],d['fingerprint']) for d in corpus(w,c,[p['id'] for p in projects])] if quick and quick.get('mode') in ('meeting_search','recorded_status','project_usage','project_summary','inspection_schedule','inbound_schedule') else None
   with LOCK:
    for jid in list(JOBS):
     if time.time()-JOBS[jid]['created']>1800 and JOBS[jid]['state'] in ('done','failed'):del JOBS[jid]

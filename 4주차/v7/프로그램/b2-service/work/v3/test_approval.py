@@ -119,20 +119,77 @@ def test_source_edit_keeps_sent_body_and_trash_closes_link(client):
     with w.connect() as db:   # the body can be edited only after analysis has finished
         ready=w.read(db,'meeting',mid);ready.update(analysis_state='ready');w.save(db,'meeting',ready)
     m=c.get('/api/meetings/'+mid).json()
-    edited=c.patch(f'/api/v3/meetings/{mid}/source',json={'version':m['version'],'title':m['title'],'date':m['date'],'source':m['source']+'\n라인 속도는 60 m/min으로 다시 합의했다.'})
+    edited=c.patch(f'/api/v3/meetings/{mid}/source',json={'version':m['version'],'title':m['title'],'date':m['date'],'reason':'합의 내용 정정','source':m['source']+'\n라인 속도는 60 m/min으로 다시 합의했다.'})
     assert edited.status_code==202,edited.text
     assert not any('60 m/min' in x for x in c.get('/api/v3/approvals/'+token).json()['lines'])
     assert listed(c,mid)['outdated']
-    assert c.delete('/api/v3/meetings/'+mid).status_code==200
+    assert c.request('DELETE','/api/v3/meetings/'+mid,json={'reason':'최신 합의 회의록으로 대체'}).status_code==200
     assert c.get('/api/v3/approvals/'+token).status_code==410
     assert c.post('/api/v3/approvals/'+token,json={'decision':'approved'}).status_code==410
     assert c.post(f'/api/v3/meetings/{mid}/approval-requests',json={'email':'customer@example.com'}).status_code==409
     assert c.post(f'/api/v3/meetings/{mid}/restore').status_code==200
     assert c.get('/api/v3/approvals/'+token).json()['status']=='sent'
-    assert c.delete('/api/v3/meetings/'+mid).status_code==200
+    assert c.request('DELETE','/api/v3/meetings/'+mid,json={'reason':'최신 합의 회의록으로 대체'}).status_code==200
     info=c.get('/api/v3/trash/meeting/'+mid).json();assert not info['blocked'],info
-    purged=c.request('DELETE','/api/v3/trash/meeting/'+mid,json={'version':info['version'],'confirmed':True})
+    purged=c.request('DELETE','/api/v3/trash/meeting/'+mid,json={'version':info['version'],'confirmed':True,'reason':'폐기 확정'})
     assert purged.status_code==200,purged.text
     assert c.get('/api/v3/approvals/'+token).status_code==404
     with w.connect() as db:
         assert not db.execute("SELECT 1 FROM records WHERE kind='approval_request' AND json_extract(payload,'$.meeting_id')=?",(mid,)).fetchone()
+
+
+def test_internal_correction_changes_source_only_after_team_lead_approval(client):
+    c=client
+    pid,mid=meeting(c,'회의록 정정 승인 검증')
+    original=c.get(f'/api/meetings/{mid}').json()
+    change={'action':'source','project_id':pid,'target_id':mid,'title':original['title'],
+            'date':original['date'],'source':original['source']+'\n납품 일정을 정정합니다.',
+            'reason':'고객과 재확인한 일정 반영'}
+    assert c.post('/api/demo-login',json={'username':'team2'}).status_code==200
+    submitted=c.post('/api/v3/management/requests',json=change)
+    assert submitted.status_code==201,submitted.text
+    request_id=submitted.json()['id']
+    assert c.get(f'/api/meetings/{mid}').json()['source']==original['source']
+    assert c.get('/api/v3/management/news').json()['count']==0
+    decision=f'/api/v3/management/requests/{request_id}/decision'
+    assert c.post(decision,json={'approved':True}).status_code==403
+
+    assert c.post('/api/demo-login',json={'username':'team1'}).status_code==200
+    inbox=c.get('/api/v3/management/news').json()
+    assert inbox['count']==1 and inbox['items'][0]['request_id']==request_id
+    assert c.post(f"/api/v3/management/news/{inbox['items'][0]['id']}/read").status_code==200
+    assert c.get('/api/v3/management/news').json()['count']==0
+    assert c.get(f'/api/v3/management/requests/{request_id}').json()['status']=='pending'
+    assert c.post(decision,json={'approved':True}).status_code==200
+    assert c.post(decision,json={'approved':True}).status_code==409
+    updated=c.get(f'/api/meetings/{mid}').json()
+    assert updated['source']==change['source'] and updated['revision']==original['revision']+1
+    assert updated['analysis_state']=='queued'
+
+    assert c.post('/api/demo-login',json={'username':'team2'}).status_code==200
+    inbox=c.get('/api/v3/management/news').json()
+    assert inbox['count']==1 and inbox['items'][0]['request_id']==request_id
+    history=c.get('/api/v3/management/history',params={'project_id':pid,'meeting_id':mid,'kind':'request'}).json()
+    assert {event['label'] for event in history['items']}=={'회의록 정정 요청','회의록 정정 요청 승인'}
+
+
+def test_grouped_history_keeps_request_approval_and_trash_together(client):
+    c=client
+    pid,mid=meeting(c,'통합 기록 묶음 검증')
+    assert c.post('/api/demo-login',json={'username':'team2'}).status_code==200
+    response=c.post('/api/v3/management/requests',json={
+        'action':'trash','project_id':pid,'target_id':mid,'reason':'중복 등록'
+    })
+    assert response.status_code==201,response.text
+    request_id=response.json()['id']
+    assert c.post('/api/demo-login',json={'username':'team1'}).status_code==200
+    assert c.post(f'/api/v3/management/requests/{request_id}/decision',json={'approved':True}).status_code==200
+    params={'project_id':pid,'meeting_id':mid,'group_requests':True}
+    for category in ('','request','trash'):
+        result=c.get('/api/v3/management/history',params={**params,'kind':category}).json()
+        groups=[item for item in result['items'] if item.get('request_id')==request_id]
+        assert len(groups)==1
+        assert {event['label'] for event in groups[0]['events']}=={
+            '회의록 휴지통 이동 요청','회의록 휴지통 이동 요청 승인','회의록 휴지통 이동'
+        }
+    assert c.get('/api/v3/management/history',params={**params,'kind':'mail'}).json()['items']==[]

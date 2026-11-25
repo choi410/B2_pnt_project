@@ -39,6 +39,8 @@ import { categoryLabel, groupKey, HISTORY_STATES, matchesHistoryState, usedCateg
 import { updateWorkspace } from "./workspace_state.mjs";
 import workflow from "./team_ui/project_flow";
 import createApproval from "./team_ui/approval";
+import { ManagementBell, ManagementHistory, ManagementRequest, ManagementAction, useManagement } from "./management_ui";
+const accountRoleLabel = (person) => person.level === "leader" ? "팀장" : "팀원";
 var isoDay = (a) => a.toISOString().slice(0, 10);
 var eventsOn = (a, e) => a.filter((t) => t.start <= e && t.end >= e);
 function calendarWeeks(a, e) {
@@ -96,6 +98,7 @@ function calendarWeeks(a, e) {
   );
 }
 function TrashPanel({ close: a, onChanged: e }) {
+  const [purgeReason, setPurgeReason] = React.useState("");
   let [t, l] = (0, React.useState)(null),
     [u, o] = (0, React.useState)("meetings"),
     [f, d] = (0, React.useState)(null),
@@ -148,6 +151,7 @@ function TrashPanel({ close: a, onChanged: e }) {
     (await api("/v3/trash/" + f.kind + "/" + f.id, "DELETE", {
       version: f.version,
       confirmed: !0,
+      reason: purgeReason.trim(),
     }),
       d(null),
       await v(),
@@ -173,7 +177,7 @@ function TrashPanel({ close: a, onChanged: e }) {
             </Button>
             <Button
               className="danger-button"
-              disabled={i || !!f.blocked}
+              disabled={i || !!f.blocked || !purgeReason.trim()}
               onClick={() => A(g)}
             >
               {"영구 삭제"}
@@ -207,6 +211,7 @@ function TrashPanel({ close: a, onChanged: e }) {
               ` \uBCF4\uACE0\uC11C ${f.counts.report}\uAC1C\uB3C4 \uD3EC\uD568\uB429\uB2C8\uB2E4.`}
           </p>
           <p className="warning">{"삭제 후에는 복원할 수 없습니다."}</p>
+          <label>영구 삭제 사유<textarea rows="2" maxLength="500" value={purgeReason} onChange={ev => setPurgeReason(ev.target.value)} /></label>
           {f.blocked && <p role="alert">{f.blocked}</p>}
         </React.Fragment>
       ) : (
@@ -1441,6 +1446,43 @@ function App() {
     Dg = (0, React.useRef)(queue);
   Dg.current = queue;
   const setD = React.useCallback((update) => setWorkspace((current) => updateWorkspace(current, update)), []);
+  const management = useManagement(api, D?.user?.id);
+  const isLead = D?.user.level === "leader";
+  const currentMeeting = D?.meetings.find(item => item.id === meeting?.id);
+  const needsMeetingRequest = !isLead && (meeting?.author !== D?.user.id || currentMeeting?.management_protected);
+  function openRequest(id, event) {
+    return Ca(async () => {
+      const row = id ? await api("/v3/management/requests/" + id) : null;
+      setModal({ type: "managementRequest", row, event });
+    });
+  }
+  async function markNews(id) {
+    try { await api("/v3/management/news/" + id + "/read", "POST"); await management.refresh(); }
+    catch (err) { setToast(err.message); }
+  }
+  function actionModal(action, projectId, targetId, title, description, execute) {
+    setModal({ type: "managementAction", title, description,
+      proposal: {action, project_id: projectId, target_id: targetId}, execute });
+  }
+  const reviewChangeAction = (entry, action) => {
+    const undo = action === "undo";
+    actionModal(
+      undo ? "변경 항목 확인 취소" : "변경 항목 제외",
+      entry.title || entry.after,
+      {action, project_id:entry.project_id, target_id:entry.id},
+      isLead ? reason => api("/v3/changes/" + entry.id + "/review", "POST", {
+        version:entry.version, action:undo ? "검토 전" : "제외", link_to:"", reason
+      }) : undefined,
+    );
+  };
+  const undoChanges = entries => actionModal(
+    "변경 항목 전체 확인 취소", entries.length + "건을 검토 전으로 되돌립니다.",
+    {target_id:entries[0].id},
+    reason => api("/v3/management/change-reviews/undo", "POST", {
+      reason, items:entries.map(entry => ({id:entry.id, version:entry.version}))
+    }),
+  );
+
   let he = async () => {
     let c = await api("/v3/workspace");
     return (setD(c), c);
@@ -1798,6 +1840,9 @@ function App() {
         >
           {"AI"}
         </Button>
+        <ManagementBell data={management} userId={D.user.id}
+          onSelect={(row) => openRequest(row.can_review ? row.request_id : null, row)}
+          onHistory={() => setModal({type:"managementHistory", project:meeting?.project_id || pid, meeting:meeting?.id})} />
         <button
           className="account"
           onClick={() =>
@@ -1809,7 +1854,7 @@ function App() {
           <span className="avatar">{D.user.name.slice(-2)}</span>
           {D.user.name}
         </button>
-        <button
+        {isLead && <button
           className="icon-button global-trash"
           aria-label="휴지통"
           title="휴지통"
@@ -1820,7 +1865,7 @@ function App() {
           }
         >
           <Trash2 size={19} />
-        </button>
+        </button>}
         <DisplaySettings />
       </header>
       <main>
@@ -1885,7 +1930,7 @@ function App() {
                   <button
                     className="project-card home-project-card"
                     key={c.id}
-                    aria-label={`${c.name} · PM ${Xu(c.pm)} · 회의록 ${y.length}건 · 프로젝트 흐름 보기`}
+                    aria-label={`${c.name} · 프로젝트 담당자 ${Xu(c.pm)} · 회의록 ${y.length}건 · 프로젝트 흐름 보기`}
                     onClick={() => {
                       workflow.hist.tab = "flow";
                       changeProject(c.id);
@@ -1894,7 +1939,7 @@ function App() {
                   >
                     <span className="project-code">
                       <span title={c.created_at ? `생성 ${String(c.created_at).slice(0, 10).replace(/-/g, ".")}` : undefined}>{c.id}</span>
-                      <span className="home-project-pm" title="프로젝트 PM">PM {Xu(c.pm)}</span>
+                      <span className="home-project-pm" title="프로젝트 담당자">담당자 {Xu(c.pm)}</span>
                     </span>
                     <h2 title={`${c.name} · 회의록 ${y.length}건`}>{c.name}</h2>
                     {(() => {
@@ -2774,7 +2819,7 @@ function App() {
                   </span>
                 </p>
               </div>
-              {nf && (
+              {(
                 <div className="actions">
                   {D.projects.find((c) => c.id === meeting.project_id)?.pm ===
                     D.user.id && (
@@ -2808,7 +2853,7 @@ function App() {
                       })
                     }
                   >
-                    {"본문 수정"}
+                    {needsMeetingRequest ? "정정 요청" : "본문 수정"}
                   </Button>
                   <Button
                     icon={Trash2}
@@ -2818,11 +2863,14 @@ function App() {
                       })
                     }
                   >
-                    {"삭제"}
+                    {needsMeetingRequest ? "휴지통 이동 요청" : "휴지통으로 이동"}
                   </Button>
                 </div>
               )}
             </div>
+            {management.requests.filter(row => row.meeting_id === meeting.id && row.status === "pending").map(row =>
+              <p key={row.id} className="management-pending"><span className="status warning">승인 대기</span>{" "}
+                <Button onClick={() => openRequest(row.id)}>요청 확인</Button></p>)}
             {React.createElement(
               approval.ApprovalLine,
               (() => {
@@ -2830,12 +2878,11 @@ function App() {
                     (c) => c.id === meeting.id,
                   )?.approval,
                   ids =
-                    ap && ap.status === "approved" && !ap.applied_at
+                    ap && ap.status === "approved" && !ap.outdated && !ap.applied_at
                       ? ap.item_ids || []
                       : [],
                   cnt =
-                    D.projects.find((c) => c.id === meeting.project_id)?.pm ===
-                    D.user.id
+                    isLead
                       ? D.changes.filter(
                           (c) =>
                             ids.includes(c.id) &&
@@ -3279,7 +3326,7 @@ function App() {
                                 const oks = g.filter(
                                   (x) => x.review_state === "확인됨",
                                 );
-                                return _PM && oks.length ? (
+                                return isLead && oks.length ? (
                                   <button
                                     type="button"
                                     className="rv-btn rv-allundo"
@@ -3287,41 +3334,7 @@ function App() {
                                     title="이 범주에서 확인한 항목을 모두 검토 전으로 되돌립니다. 제외한 항목은 그대로 둡니다."
                                     onClick={(ev) => {
                                       ev.stopPropagation();
-                                      Ca(async () => {
-                                        const done = [];
-                                        for (const e of oks) {
-                                          done.push(
-                                            await api(
-                                              "/v3/changes/" + e.id + "/review",
-                                              "POST",
-                                              {
-                                                version: e.version,
-                                                action: "검토 전",
-                                                link_to: "",
-                                              },
-                                            ),
-                                          );
-                                        }
-                                        setD((y) => ({
-                                          ...y,
-                                          changes: y.changes.map((x) => {
-                                            const q = done.find(
-                                              (d) => d.id === x.id,
-                                            );
-                                            return q
-                                              ? {
-                                                  ...x,
-                                                  ...q,
-                                                }
-                                              : x;
-                                          }),
-                                        }));
-                                        setToast(
-                                          done.length +
-                                            "건의 확인을 취소했습니다.",
-                                        );
-                                        he().catch(() => {});
-                                      });
+                                      undoChanges(oks);
                                     }}
                                   >
                                     {"전체 되돌리기"}
@@ -3380,7 +3393,7 @@ function App() {
                             "항목을 누르면 왼쪽 원문에서 근거 문장이 형광펜으로 표시됩니다."}
                         </p>
                         {(() => {
-                          if (!_PM || at(meeting) || !_ev.length) return null;
+                          if ((!_PM && !isLead) || at(meeting) || !_ev.length) return null;
                           const wait = _ev.filter(
                               (x) =>
                                 x.review_state !== "확인됨" &&
@@ -3388,43 +3401,10 @@ function App() {
                             ),
                             oks = _ev.filter(
                               (x) => x.review_state === "확인됨",
-                            ),
-                            undo = () =>
-                              Ca(async () => {
-                                const done = [];
-                                for (const e of oks) {
-                                  done.push(
-                                    await api(
-                                      "/v3/changes/" + e.id + "/review",
-                                      "POST",
-                                      {
-                                        version: e.version,
-                                        action: "검토 전",
-                                        link_to: "",
-                                      },
-                                    ),
-                                  );
-                                }
-                                setD((y) => ({
-                                  ...y,
-                                  changes: y.changes.map((x) => {
-                                    const q = done.find((d) => d.id === x.id);
-                                    return q
-                                      ? {
-                                          ...x,
-                                          ...q,
-                                        }
-                                      : x;
-                                  }),
-                                }));
-                                setToast(
-                                  done.length + "건의 확인을 취소했습니다.",
-                                );
-                                he().catch(() => {});
-                              });
+                            );
                           return (
                             <div className="rv-bulk">
-                              <button
+                              {_PM && <button
                                 type="button"
                                 className="rv-btn rv-allok"
                                 disabled={_busy || !wait.length}
@@ -3434,16 +3414,16 @@ function App() {
                                 {wait.length
                                   ? "남은 " + wait.length + "건 전체 확인"
                                   : "전체 확인"}
-                              </button>
-                              <button
+                              </button>}
+                              {isLead && <button
                                 type="button"
                                 className="rv-btn rv-allundo"
                                 disabled={_busy || !oks.length}
                                 title="확인한 항목을 모두 검토 전으로 되돌립니다. 제외한 항목은 그대로 둡니다."
-                                onClick={undo}
+                                onClick={() => undoChanges(oks)}
                               >
                                 {"전체 확인 취소"}
-                              </button>
+                              </button>}
                             </div>
                           );
                         })()}
@@ -3599,7 +3579,7 @@ function App() {
                                   >
                                     {"원문에서 보기"}
                                   </button>
-                                  {_PM && !no && (
+                                  {_PM && !no && !ok && (
                                     <button
                                       type="button"
                                       className="rv-link-btn"
@@ -3619,7 +3599,7 @@ function App() {
                                   )}
                                   {!_PM && !ok && !no && (
                                     <small className="rv-pmonly">
-                                      {"확인·제외는 PM(" +
+                                      {"확인·제외는 프로젝트 담당자(" +
                                         Xu(_P?.pm) +
                                         ")만 할 수 있습니다"}
                                     </small>
@@ -3644,14 +3624,14 @@ function App() {
                                       {"제외"}
                                     </button>
                                   )}
-                                  {_PM && (ok || no) && (
+                                  {(ok || no) && (
                                     <button
                                       type="button"
                                       className="rv-btn rv-undo"
                                       disabled={_busy}
-                                      onClick={() => _send(e, "검토 전", "")}
+                                      onClick={() => reviewChangeAction(e, "undo")}
                                     >
-                                      {"되돌리기"}
+                                      {isLead ? "검토 전으로 되돌리기" : "되돌리기 요청"}
                                     </button>
                                   )}
                                 </div>
@@ -3944,14 +3924,13 @@ function App() {
                 <h1>{pid ? et(pid) : "프로젝트 변경이력"}</h1>
                 {pid && (
                   <p>
-                    {"PM "}
+                    {"프로젝트 담당자 "}
                     {Xu(D.projects.find((c) => c.id === pid)?.pm)}
                   </p>
                 )}
               </div>
               <div className="actions">
-                {pid &&
-                  D.projects.find((c) => c.id === pid)?.pm === D.user.id && (
+                {pid && isLead && (
                     <Button
                       icon={Trash2}
                       onClick={() =>
@@ -3985,6 +3964,9 @@ function App() {
                   et,
                   Xu,
                   Ig: ChangeValue,
+                  requestStage: (meeting, stages, currentStage, stage) => setModal({
+                    type: "managementStage", meeting, stages, currentStage, stage, reason: "",
+                  }),
                   df,
                   he,
                 },
@@ -4325,7 +4307,7 @@ function App() {
                                             {rev}
                                           </span>
                                         )}
-                                        {D.projects.find(
+                                        {e.review_state !== "확인됨" && D.projects.find(
                                           (q) => q.id === e.project_id,
                                         )?.pm === D.user.id && (
                                           <button
@@ -4370,54 +4352,15 @@ function App() {
                                           {"⚠ " + k.text}
                                         </p>
                                       ))}
-                                      {(e.checks || []).length > 0 &&
-                                        D.projects.find(
-                                          (q) => q.id === e.project_id,
-                                        )?.pm === D.user.id && (
-                                          <div className="tl-fix">
-                                            <span>
-                                              {"이 항목의 기록이 아니라면"}
-                                            </span>
-                                            <button
-                                              type="button"
-                                              className="rv-btn rv-no"
-                                              disabled={working}
-                                              onClick={() =>
-                                                Ca(async () => {
-                                                  const q = await api(
-                                                    "/v3/changes/" +
-                                                      e.id +
-                                                      "/review",
-                                                    "POST",
-                                                    {
-                                                      version: e.version,
-                                                      action: "제외",
-                                                      link_to: "",
-                                                    },
-                                                  );
-                                                  setD((y) => ({
-                                                    ...y,
-                                                    changes: y.changes.map(
-                                                      (z) =>
-                                                        z.id === q.id
-                                                          ? {
-                                                              ...z,
-                                                              ...q,
-                                                            }
-                                                          : z,
-                                                    ),
-                                                  }));
-                                                  setToast(
-                                                    "이 기록을 변경이력에서 제외했습니다. 회의록 검수 화면에서 되돌릴 수 있습니다.",
-                                                  );
-                                                  he().catch(() => {});
-                                                })
-                                              }
-                                            >
-                                              {"이 기록 제외"}
-                                            </button>
-                                          </div>
-                                        )}
+                                      {(e.checks || []).length > 0 && (
+                                        <div className="tl-fix">
+                                          <span>이 항목의 기록이 아니라면</span>
+                                          <button type="button" className="rv-btn rv-no" disabled={working}
+                                            onClick={() => reviewChangeAction(e, "exclude")}>
+                                            {isLead ? "이 기록 제외" : "이 기록 제외 요청"}
+                                          </button>
+                                        </div>
+                                      )}
                                       <button
                                         type="button"
                                         className="tl-more"
@@ -4749,6 +4692,50 @@ function App() {
       {modal?.type === "unifiedTrash" && (
         <TrashPanel close={() => setModal(null)} onChanged={he} />
       )}
+      {modal?.type === "managementHistory" && <ManagementHistory api={api} Modal={Modal}
+        projects={D.projects} initialProject={modal.project} initialMeeting={modal.meeting}
+        close={() => setModal(null)} openRequest={openRequest} />}
+      {modal?.type === "managementRequest" && <ManagementRequest api={api} Modal={Modal}
+        row={modal.row} event={modal.event} userId={D.user.id} onViewed={markNews}
+        close={() => setModal(null)}
+        meetingAvailable={modal.event?.can_open || D.meetings.some(item => item.id === modal.row?.meeting_id)}
+        changed={async (row, approved) => {
+          if (approved) {
+            delete workflow.flows[row.project_id];
+            if (meeting?.id === row.meeting_id) {
+              if (row.action === "trash") Be("minutes");
+              else setMeeting(await api("/meetings/" + meeting.id));
+            }
+          }
+          await he(); await management.refresh(); setToast(approved ? "승인하고 반영했습니다." : "반려했습니다.");
+        }} />}
+      {modal?.type === "managementAction" && <ManagementAction key={modal.proposal.target_id} modal={modal}
+        api={api} Modal={Modal} close={() => setModal(null)}
+        saved={async (message) => { await he(); await management.refresh(); setToast(message); }} />}
+      {modal?.type === "managementStage" && <Modal title={isLead ? "회의 단계 변경" : "회의 단계 변경 요청"}
+        close={() => setModal(null)} footer={<Button primary disabled={working || !modal.reason.trim()}
+          onClick={() => Ca(async () => {
+            const { meeting, stage } = modal;
+            const reason = modal.reason.trim();
+            if (isLead) {
+              await api("/v3/meetings/" + meeting.id + "/stage", "POST", {stage, reason});
+              delete workflow.flows[meeting.project_id];
+              await he();
+            } else {
+              await api("/v3/management/requests", "POST", {
+                action: "stage", project_id: meeting.project_id, target_id: meeting.id, stage, reason
+              });
+            }
+            setModal(null); await management.refresh();
+            setToast(isLead ? "회의 단계를 변경했습니다." : "팀장에게 요청을 보냈습니다.");
+          })}>{isLead ? "반영" : "요청 보내기"}</Button>}>
+          <h3>{modal.meeting.title}</h3>
+          <p className="muted">{[modal.meeting.date, "현재 단계 · " + (modal.currentStage || "미지정")].filter(Boolean).join(" / ")}</p>
+          <label>변경할 회의 단계<select value={modal.stage} onChange={e => setModal({...modal, stage:e.target.value})}>
+            <option value="">자동 판단</option>{modal.stages.map(stage => <option key={stage}>{stage}</option>)}
+          </select></label>
+          <label>사유<textarea rows="2" maxLength="500" value={modal.reason} onChange={e => setModal({...modal, reason:e.target.value})} /></label>
+        </Modal>}
       {modal?.type === "deleteProject" && (
         <Modal
           title="프로젝트를 휴지통으로 이동할까요?"
@@ -4758,7 +4745,7 @@ function App() {
               <Button onClick={() => setModal(null)}>{"취소"}</Button>
               <Button
                 primary={!0}
-                disabled={working}
+                disabled={working || !modal.reason?.trim()}
                 onClick={() =>
                   Ca(async () => {
                     (await api(
@@ -4766,6 +4753,7 @@ function App() {
                       "POST",
                       {
                         version: modal.preview.version,
+                        reason: modal.reason.trim(),
                       },
                     ),
                       setPid(""),
@@ -4790,6 +4778,7 @@ function App() {
               "개와 연결된 일정·변경이력이 함께 숨겨집니다. 상단 휴지통에서 복원할 수 있습니다."
             }
           </p>
+          <label>휴지통 이동 사유<textarea rows="2" maxLength="500" value={modal.reason || ""} onChange={e => setModal({...modal, reason:e.target.value})} /></label>
         </Modal>
       )}
       {modal?.type === "account" && (
@@ -4798,7 +4787,7 @@ function App() {
           <p>
             {D.user.department}
             {" · "}
-            {D.user.position}
+            {accountRoleLabel(D.user)}
           </p>
           <Button
             icon={LogOut}
@@ -4890,7 +4879,7 @@ function App() {
             />
           </label>
           <p className="muted">
-            {"PM "}
+            {"프로젝트 담당자 "}
             {D.user.name}
             {" · 현재 팀원 "}
             {D.people.length}
@@ -4925,32 +4914,28 @@ function App() {
       )}
       {modal?.type === "source" && (
         <Modal
-          title="회의록 본문 수정"
+          title={needsMeetingRequest ? "회의록 정정 요청" : "회의록 본문 수정"}
           close={() => setModal(null)}
           footer={
             <Button
               primary={!0}
-              disabled={working || modal.source.length < 10}
+              disabled={working || modal.source.length < 10 || ((needsMeetingRequest || currentMeeting?.management_protected) && !modal.reason?.trim())}
               onClick={() =>
                 Ca(async () => {
-                  (await api(
-                    "/v3/meetings/" + meeting.id + "/source",
-                    "PATCH",
-                    {
-                      version: meeting.version,
-                      title: modal.title,
-                      date: modal.date,
-                      source: modal.source,
-                    },
-                  ),
-                    setModal(null),
-                    setMeeting(await api("/meetings/" + meeting.id)),
-                    await he(),
-                    setToast("새 버전으로 저장하고 다시 분석합니다."));
+                  const fields={title:modal.title,date:modal.date,source:modal.source,reason:modal.reason || ""};
+                  if (needsMeetingRequest) {
+                    await api("/v3/management/requests", "POST", {...fields, action:"source", project_id:meeting.project_id, target_id:meeting.id});
+                    await management.refresh(); setToast("팀장에게 정정을 요청했습니다.");
+                  } else {
+                    const result=await api("/v3/meetings/" + meeting.id + "/source", "PATCH", {...fields, version:meeting.version});
+                    setMeeting(await api("/meetings/" + meeting.id)); await he();
+                    setToast(result.changed ? "새 버전으로 저장하고 다시 분석합니다." : "바뀐 내용이 없습니다.");
+                  }
+                  setModal(null);
                 })
               }
             >
-              {"저장하고 다시 분석"}
+              {needsMeetingRequest ? "요청 보내기" : "저장하고 다시 분석"}
             </Button>
           }
         >
@@ -4992,29 +4977,34 @@ function App() {
               }
             />
           </label>
+          {(needsMeetingRequest || currentMeeting?.management_protected) &&
+            <label>정정 사유<textarea rows="2" maxLength="500" value={modal.reason || ""} onChange={e => setModal({...modal, reason:e.target.value})} /></label>}
         </Modal>
       )}
       {modal?.type === "trash" && (
         <Modal
-          title="회의록을 휴지통으로 이동할까요?"
+          title={needsMeetingRequest ? "회의록 휴지통 이동 요청" : "회의록을 휴지통으로 이동할까요?"}
           close={() => setModal(null)}
           footer={
             <React.Fragment>
               <Button onClick={() => setModal(null)}>{"취소"}</Button>
               <Button
                 primary={!0}
-                disabled={working}
+                disabled={working || ((needsMeetingRequest || currentMeeting?.management_protected) && !modal.reason?.trim())}
                 onClick={() =>
                   Ca(async () => {
-                    (await api("/v3/meetings/" + meeting.id, "DELETE"),
-                      setModal(null),
-                      Be("minutes"),
-                      await he(),
-                      setToast("회의록을 휴지통으로 이동했습니다."));
+                    if (needsMeetingRequest) {
+                      await api("/v3/management/requests", "POST", {action:"trash", project_id:meeting.project_id, target_id:meeting.id,reason:modal.reason});
+                      await management.refresh(); setToast("팀장에게 휴지통 이동을 요청했습니다.");
+                    } else {
+                      await api("/v3/meetings/" + meeting.id, "DELETE", {reason:modal.reason || ""});
+                      Be("minutes"); await he(); setToast("회의록을 휴지통으로 이동했습니다.");
+                    }
+                    setModal(null);
                   })
                 }
               >
-                {"휴지통으로 이동"}
+                {needsMeetingRequest ? "요청 보내기" : "휴지통으로 이동"}
               </Button>
             </React.Fragment>
           }
@@ -5023,6 +5013,8 @@ function App() {
           <p className="muted">
             {"이 회의록에서 나온 일정과 변경 기록도 목록에서 제외됩니다."}
           </p>
+          {(needsMeetingRequest || currentMeeting?.management_protected) &&
+            <label>휴지통 이동 사유<textarea rows="2" maxLength="500" value={modal.reason || ""} onChange={e => setModal({...modal, reason:e.target.value})} /></label>}
         </Modal>
       )}
       {toast && (
@@ -5065,7 +5057,7 @@ function App() {
           >
             <span>
               {c.name}
-              <small>{c.position}</small>
+              <small>{accountRoleLabel(c)}</small>
             </span>
             <ArrowRight size={18} />
           </button>

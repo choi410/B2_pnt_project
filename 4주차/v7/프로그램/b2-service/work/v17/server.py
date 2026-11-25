@@ -452,7 +452,8 @@ def create_project(body:ProjectInput,actor=Depends(user)):
   pm_id=body.pm_id or actor['id']
   if pm_id not in people:raise HTTPException(422,'등록된 PM을 선택해 주세요.')
   pid='P-'+datetime.now(KST).strftime('%y')+'-'+uid()[:6].upper()
-  p={'id':pid,'name':name,'pm':pm_id,'members':list(dict.fromkeys([actor['id'],pm_id]+body.members)),'year':datetime.now(KST).year,'created_at':now()}
+  leads=[person['id'] for person in all_records(c,'person') if person.get('level')=='leader' and person['department']==actor['department']]
+  p={'id':pid,'name':name,'pm':pm_id,'department':actor['department'],'members':list(dict.fromkeys([actor['id'],pm_id]+body.members+leads)),'year':datetime.now(KST).year,'created_at':now()}
   save(c,'project',p)
   return p
 

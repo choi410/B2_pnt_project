@@ -13,6 +13,7 @@ from work.v3.conversations import build_router as conversations_router
 from work.v3.approval import build_router as approval_router
 from work.v3.change_category import build_router as category_router
 from work.v3.sample_workspace import initialize as initialize_examples
+from work.v3.management import build_router as management_router
 
 app = legacy.app
 legacy.COOKIE='b2_v7_release_session'
@@ -31,6 +32,7 @@ app.include_router(trash_router(legacy))
 app.include_router(requirements_router(legacy))
 app.include_router(approval_router(legacy))
 app.include_router(category_router(legacy))
+app.include_router(management_router(legacy))
 app.version='7.0.0'
 
 @app.get('/api/package-info')

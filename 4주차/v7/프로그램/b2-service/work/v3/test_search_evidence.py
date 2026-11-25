@@ -83,6 +83,52 @@ def test_selected_schedule_distinguishes_dispatch_shipment_and_delivery(client,m
     assert [s['date'] for s in result['sources']]==['2026-11-20']
 
 
+def test_sat_schedule_uses_original_table_row_and_keeps_inbound_separate(client):
+    from work.v3.test_conversations import send
+
+    c,_=client
+    p=project(c,'롤프레스 실증 프로젝트')
+    a=meeting(c,p,'* 일정\nSAT 2027.05.12 오창공장\nFAT 2027.03.24 본사',date='')
+    meeting(c,p,'SAT 검수일: 2027.04.31\nSAT 일정은 2027.05.20 회의에서 결정한다.\n6차 회의 (SAT)',date='')
+
+    thread=send(c,'SAT 일정은 언제야?',p=p['id'])
+    message=thread['messages'][-1]
+    result=message['result']
+    assert result['mode']=='inspection_schedule' and result['answerable']
+    assert '2027.05.12 오창공장' in result['points'][0]['text']
+    assert len(result['sources'])==1
+    sid=result['sources'][0]['id']
+    proof=c.get(f"/api/conversations/{thread['id']}/messages/{message['id']}/sources/{sid}")
+    assert proof.status_code==200 and proof.json()['meeting_id']==a['id']
+    result=send(c,'SAT 입고 일정은 언제야?',p=p['id'])['messages'][-1]['result']
+    assert result['mode']=='inbound_schedule' and not result['answerable'] and not result['sources']
+
+
+def test_followup_keeps_inbound_and_departure_distinct(client,monkeypatch):
+    from work.v3 import chat_interpreter, conversations
+    from work.v3.test_conversations import send
+
+    c,_=client
+    p=project(c,'해솔 검사 설비')
+    project(c,'아라 계측 장비')
+    meeting(c,p,'SAT 일정은 2027.02.08 송도공장으로 변경하기로 합의했다.',date='2026-11-18')
+    monkeypatch.setenv('B2_CHAT_SCOPE_PLANNER','1')
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    thread=send(c,'해솔 검사 설비 SAT 일정은 언제야?')
+    assert thread['messages'][-1]['result'].get('mode')=='inspection_schedule', thread['messages'][-1]
+    followup=send(c,'SAT 입고 일정은 언제야?',cid=thread['id'])
+    result=followup['messages'][-1]['result']
+    assert result.get('mode')=='inbound_schedule' and not result['answerable'] and not result['sources'], result
+    with w.connect() as db:
+        message=w.read(db,'ai_message',followup['messages'][-1]['id'])
+        actor=w.read(db,'person','team1')
+        query='같은 프로젝트 장비 출하일은 언제야?'
+        context=conversations.resolve_question(w,db,actor,query,message)
+        assert context['project_id']==p['id'] and not context.get('clarify')
+        assert context['query']=='장비 출하일은 언제야?'
+        assert not chat_interpreter.needs_interpreter(w,db,actor,query,context,message)
+
+
 def test_topic_list_all_dates_not_first_document_and_no_generation(client):
     c,_=client;p=project(c)
     made=[meeting(c,p,'점검 커버는 여닫이 방식으로 합의했다.',f'2026-11-{d:02}') for d in (13,9,11)]

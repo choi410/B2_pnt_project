@@ -86,6 +86,8 @@ def answer(w,c,projects,intent,plan):
         if is_project and operation=='rank':notice+=' 생성일이 확인되지 않는 '+str(missing)+'개는 비교에서 제외했습니다.'
     if not chosen:
         message='조회할 수 있는 등록된 '+noun+'이 없습니다.' if not entries else label+'이 확인되지 않아 처음·최신 순서를 정할 수 없습니다.'
+        if entries and basis=='meeting_date' and operation=='rank':
+            message+=f' 등록된 회의록 {len(entries)}건의 회의일이 비어 있어요. 올린 순서로 확인하려면 “최근 등록한 회의록 알려줘”라고 물어보세요.'
         return {'kind':'projects' if is_project else 'documents','mode':('project_order' if operation=='rank' else 'project_list') if is_project else 'meeting_lookup', 'answerable':False,'projects':[],'points':[],'sources':[],'meetings':[],'count':0,'total_count':len(entries),'result_project_ids':[],'message':message,'notice':notice}
     if is_project:
         people={p['id']:p['name'] for p in w.all_records(c,'person')}

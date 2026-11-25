@@ -173,6 +173,20 @@ def test_implicit_person_deadline_reads_same_task_original(client,plans):
     assert missing['kind']=='clarification' and not used
 
 
+def test_original_deadline_uses_previous_task_and_earlier_meeting(client,plans):
+    c,_=client
+    _,used=plans
+    p=project(c,'별나래 시험 설비')
+    initial=meeting(c,p,'교정 확인표는 한서진이 2026년 8월 12일까지 제출한다.','2026-08-03')
+    meeting(c,p,'교정 확인표의 담당자는 한서진으로 유지하고, 제출 기한만 2026년 8월 21일로 연기한다.','2026-08-15')
+    thread,current=answer(c,'별나래 교정 확인표는 누가 언제까지 내?')
+    assert '8월 21일' in current['points'][0]['text']
+    _,original=answer(c,'그 사람 제출일 원래 언제였어?',thread['id'])
+    assert original['mode']=='task_deadline' and '8월 12일' in original['points'][0]['text']
+    assert [s['date'] for s in original['sources']]==[initial['date']]
+    assert not used
+
+
 @pytest.mark.parametrize('noun',['자료','보고서','도면','시험','업무'])
 def test_unmentioned_task_reference_does_not_invent_a_target(noun):
     previous={'question':'왜 보류했지?','job':{'result':{'points':[{'text':'온도 요청을 보류하고 기존 온도를 유지합니다.'}]}}}
@@ -208,6 +222,157 @@ def plans(monkeypatch):
         return pending.pop(0)
     monkeypatch.setattr(language,'infer',infer)
     return pending,used
+
+
+def test_general_chat_uses_only_general_history_and_keeps_workspace_lookup(client,plans,monkeypatch):
+    from work.v3 import chat_model
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    p=project(c,'새울 전극 검사 설비')
+    meeting(c,p,'내부 검증코드는 ZETA31이다.','2026-09-10')
+    requests=[]
+
+    def complete(_w,request):
+        return {'route':'general','query':''}
+
+    def reply(_w,system,payload):
+        requests.append(payload)
+        assert 'ZETA31' not in str(payload)
+        if payload['general_conversation']:
+            assert payload['general_conversation'][-1]['question']=='왜 별은 반짝여?'
+            return '대기를 지나온 별빛이 공기의 움직임에 따라 흔들려요.'
+        return '별빛이 지구 대기를 지나면서 굴절되기 때문이에요.'
+
+    monkeypatch.setattr(chat_model,'complete',complete)
+    monkeypatch.setattr(chat_model,'reply',reply)
+    thread,r=answer(c,'새울 회의록 목록 보여줘')
+    assert r['mode']=='meeting_lookup'
+    thread,r=answer(c,'왜 별은 반짝여?',thread['id'])
+    assert r['mode']=='general_knowledge' and r['answerable'] and not r['sources']
+    assert not requests[0]['general_conversation']
+    thread,r=answer(c,'그걸 한 문장으로 다시 설명해줘',thread['id'])
+    assert r['mode']=='general_knowledge' and r['answerable']
+    _,r=answer(c,'새울 회의록 몇 건이야?',thread['id'])
+    assert r['count']==1 and len(requests)==2
+
+
+def test_public_question_shows_public_links_and_transmits_only_current_search_terms(client,plans,monkeypatch):
+    from work.v3 import chat_model,general_chat
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    monkeypatch.setenv('BRAVE_SEARCH_API_KEY','test-only')
+    searches=[]
+
+    def search(query,key):
+        searches.append(query)
+        assert key=='test-only'
+        return [{'title':'공공 날씨 자료','text':'구미 기온 12도','url':'https://example.org/weather'}]
+
+    def complete(_w,request):
+        if 'public_records' in request.payload:
+            assert request.payload['public_records'][0]['id']=='W1'
+            return {'sources':['W1']}
+        return {'route':'web','query':'오늘 구미 날씨'}
+
+    monkeypatch.setattr(general_chat,'_web_search',search)
+    monkeypatch.setattr(chat_model,'complete',complete)
+    monkeypatch.setattr(chat_model,'reply',lambda *a:'공개 자료에 제시된 구미 기온은 12도예요.')
+    _,r=answer(c,'오늘 구미 날씨 알려줘')
+    assert r['mode']=='public_search' and r['answerable'] and not r['sources']
+    assert r['public_sources']==[{'title':'공공 날씨 자료','url':'https://example.org/weather'}]
+    assert searches==['오늘 구미 날씨']
+    assert not general_chat.search_query('연락처 me@example.org를 인터넷에서 찾아줘','me')
+    assert not general_chat.search_query('오늘 구미 날씨 알려줘','2027 구미 날씨')
+    monkeypatch.delenv('BRAVE_SEARCH_API_KEY')
+    _,r=answer(c,'오늘 구미 날씨 알려줘')
+    assert r['mode']=='public_search' and not r['answerable'] and not r['public_sources']
+    assert searches==['오늘 구미 날씨']
+
+
+def test_pnt_company_question_uses_public_record_instead_of_attendee_mentions(client,plans,monkeypatch):
+    from work.v3 import chat_model,general_chat
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    p=project(c,'접착기 설치')
+    meeting(c,p,'참석자: PNT 사내 명단','2026-09-10')
+
+    monkeypatch.setattr(chat_model,'complete',lambda *a:pytest.fail('Read the public company record'))
+    _,r=answer(c,'pnt 는 뭐하는 회사야?')
+    assert r['mode']=='public_search' and r['answerable'] and not r['sources']
+    assert r['public_sources'][0]['url']==general_chat.PNT_PUBLIC['url']
+    assert '이차전지' in r['message'] and '사내 명단' not in r['message']
+
+
+def test_reference_question_can_use_public_encyclopedia_without_a_search_key(client,plans,monkeypatch):
+    from work.v3 import chat_model,general_chat
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    monkeypatch.delenv('BRAVE_SEARCH_API_KEY',raising=False)
+    searches=[]
+    def encyclopedia(query):
+        searches.append(query)
+        return [{'title':'메아리','text':'소리가 표면에 반사되어 다시 들리는 현상',
+                 'url':'https://ko.wikipedia.org/wiki/메아리'}]
+    def complete(_w,request):
+        if 'public_records' in request.payload:
+            return {'sources':['W1']}
+        assert 'general_conversation' not in request.payload
+        return {'route':'reference','query':'소리가 울리는 이유'}
+    monkeypatch.setattr(general_chat,'_encyclopedia_search',encyclopedia)
+    monkeypatch.setattr(chat_model,'complete',complete)
+    monkeypatch.setattr(chat_model,'reply',lambda *a:'표면에 반사된 소리가 다시 들리는 현상이에요.')
+    _,r=answer(c,'소리는 왜 울려?')
+    assert r['mode']=='public_search' and r['public_sources'][0]['title']=='메아리'
+    assert searches==['소리 울림']
+    assert not general_chat._reference_query('기밀 자료에서 소리는 왜 울린대?', '소리 메아리')
+
+
+def test_public_restatement_keeps_its_verified_link_without_reclassification(client,plans,monkeypatch):
+    from work.v3 import chat_model
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    monkeypatch.setattr(chat_model,'complete',lambda *a:pytest.fail('Rephrasing does not require another search decision'))
+    monkeypatch.setattr(chat_model,'reply',lambda *a:'PNT supplies equipment for electrode manufacturing.')
+    thread,original=answer(c,'PNT는 어떤 회사야?')
+    _,rewritten=answer(c,'그 설명을 영어 한 문장으로 바꿔줘',thread['id'])
+    assert rewritten['message'].startswith('PNT supplies')
+    assert rewritten['public_sources']==original['public_sources']
+
+
+def test_mixed_question_keeps_workspace_and_public_proof_separate(client,plans,monkeypatch):
+    from work.v3 import chat_model,general_chat
+    from work.v3.test_question_scope import change
+    c,_=client
+    monkeypatch.setenv('B2_CHAT_GENERAL','1')
+    p=project(c,'바다소재 코팅기')
+    m=meeting(c,p,'코팅 폭 650 mm로 합의했다.','2026-11-09')
+    change(m,'코팅 폭','650 mm')
+    asked=[]
+    def search(topic):
+        asked.append(topic)
+        return [{'title':'공개 코팅 자료','url':'https://example.org/coating','text':'코팅 폭은 적용 소재와 장비에 따라 다르다.'}]
+    monkeypatch.setattr(general_chat,'_encyclopedia_search',search)
+    monkeypatch.setattr(chat_model,'complete',lambda *a:{'sources':['W1']})
+    monkeypatch.setattr(chat_model,'reply',lambda *a:'코팅 폭은 소재와 장비에 따라 달라져요.')
+    thread,r=answer(c,'우리 바다소재 프로젝트의 코팅 폭과 일반적인 코팅 폭은 어떻게 달라?')
+    assert r['mode']=='workspace_public_comparison' and r['comparison_complete']
+    assert '650 mm' in r['points'][0]['text']
+    assert r['comparison_public']=={'message':'코팅 폭은 소재와 장비에 따라 달라져요.',
+                                   'sources':[{'title':'공개 코팅 자료','url':'https://example.org/coating'}]}
+    assert asked==['코팅 폭']
+    message=thread['messages'][-1]
+    proof=c.get(f"/api/conversations/{thread['id']}/messages/{message['id']}/sources/{r['sources'][0]['id']}")
+    assert proof.status_code==200 and proof.json()['meeting_id']==m['id']
+    assert not general_chat.comparison('우리 바다소재 코팅 폭과 일반적인 바다소재 폭은 어떻게 달라?',[p])[1]
+    assert general_chat.comparison('일반적인 코팅 폭과 우리 바다소재 프로젝트의 코팅 폭을 비교해줘',[p])[1]=='코팅 폭'
+    with w.connect() as db:
+        from work.v3 import conversations
+        actor=w.read(db,'person','team1')
+        previous=w.read(db,'ai_message',message['id'])
+        question='그럼 90도로 올리는 건 왜 보류했어?'
+        ctx=conversations.resolve_question(w,db,actor,question,previous)
+        assert ctx['project_ids']==[p['id']] and not ctx.get('clarify')
+        assert not language.needs_interpreter(w,db,actor,question,ctx,previous)
 
 
 def test_model_shipment_intent_handles_a_paraphrase_and_elliptical_followup(client,plans,monkeypatch):

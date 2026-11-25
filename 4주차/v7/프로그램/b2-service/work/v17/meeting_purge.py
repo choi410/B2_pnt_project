@@ -2,12 +2,13 @@
 import json,os
 from pathlib import Path
 from fastapi import APIRouter,Depends,HTTPException
-from pydantic import BaseModel,ConfigDict
+from pydantic import BaseModel,ConfigDict,Field
 
 class Purge(BaseModel):
  model_config=ConfigDict(extra='forbid')
  version:int
  confirmed:bool=False
+ reason:str=Field(default='',max_length=500)
 
 def refers_to(value,mid):
  if isinstance(value,dict):return value.get('meeting_id')==mid or any(refers_to(v,mid) for v in value.values())
@@ -92,7 +93,8 @@ def build_router(w):
   cleanup_files(w)
   return {'ok':True}
  @r.delete('/meetings/{mid}')
- def meeting(mid,body:Purge,actor=Depends(w.user)):return delete('meeting',mid,body,actor)
+ def meeting(mid,body:Purge,actor=Depends(w.user)):
+  raise HTTPException(409,'통합 휴지통에서 영구 삭제 사유를 남겨 주세요.')
  @r.delete('/meeting-imports/{iid}')
  def draft(iid,body:Purge,actor=Depends(w.user)):return delete('import',iid,body,actor)
  return r

@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from work.v17 import team_config
 from work.v3 import mailer
+from work.v3.management import record, require_lead
 from work.v17.intake_review import PDF_LOCK, preview_pages
 
 KIND='approval_request'
@@ -151,6 +152,7 @@ def build_router(w):
                 # A new request replaces the link of any request still waiting.
                 if old['status']=='sent':old['status']='canceled';w.save(c,KIND,old)
             request={'id':w.uid(),'meeting_id':mid,'project_id':m['project_id'],'token_hash':token_hash(token),'email':email,'name':name,'message':message,'status':'sent','comment':'','requested_by':actor['id'],'sent_at':w.now(),'expires_at':expires_at,'responded_at':None,'sequence':len(previous)+1,'revision':m['revision'],'title':m['title'],'date':m.get('date',''),'lines':[x['text'] for x in m.get('lines',[])],'original':m['revision']==1,'items':items}
+            request['delivery_mode']=mailer.mode()
             w.save(c,KIND,request)
         result={'id':request['id'],'status':'sent','email':email,'expires_at':expires_at,'mode':mailer.mode()}
         if mailer.mode()!='smtp':result['link']=link   # nothing was mailed; let the PM open it
@@ -164,9 +166,14 @@ def build_router(w):
     def apply(mid,actor=Depends(w.user)):
         """상대가 합의한 항목 중 아직 요청·보류인 것을 PM이 합의로 바꾼다. 회신만으로는 바꾸지 않는다."""
         with w.connect() as c:
-            c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);w.project(c,m['project_id'],actor,True)
+            c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor)
+            require_lead(p,actor)
+            if m.get('deleted_at'):raise HTTPException(409,'휴지통에 있는 회의록입니다.')
             latest=next(iter(of_meeting(c,mid)),None)
             if not latest or effective_status(latest,w.now())!='approved':raise HTTPException(409,'합의된 요청이 없습니다.')
+            waiting,current=meeting_items(w,c,m)
+            if waiting or latest['revision']!=m['revision'] or latest.get('items',[])!=current:
+                raise HTTPException(409,'합의 이후 회의록 또는 변경 항목이 바뀌었습니다. 다시 합의를 요청해 주세요.')
             done=[]
             for x in latest.get('items') or []:
                 try:e=w.read(c,'change_event',x['id'])
@@ -174,7 +181,8 @@ def build_router(w):
                 if e.get('superseded_by_revision') or e.get('review_state')!='확인됨' or e.get('business_state') not in ('요청','보류'):continue
                 e['edit_history']=[*e.get('edit_history',[]),{'at':w.now(),'by':actor['id'],'action':'합의 반영','record':{k:v for k,v in e.items() if k!='edit_history'}}]
                 e.update(business_state='확정',customer_agreed_at=latest.get('responded_at'),version=e['version']+1,updated_at=w.now(),updated_by=actor['id']);w.save(c,'change_event',e);done.append(e['id'])
-            latest['applied_at']=w.now();latest['applied_by']=actor['id'];w.save(c,KIND,latest)
+            if done:
+                latest.update(applied_at=w.now(),applied_by=actor['id']);w.save(c,KIND,latest)
         return {'applied':len(done),'ids':done}
     # The two routes below are opened from the mail link without a login; the token is the key.
     @r.get('/approvals/{token}')
@@ -210,10 +218,14 @@ def build_router(w):
         if body.decision not in ('approved','rejected'):raise HTTPException(422,'승인 또는 반려를 선택해 주세요.')
         with w.connect() as c:
             # The write lock makes two simultaneous clicks resolve to one answer.
-            c.execute('BEGIN IMMEDIATE');request,_,_=by_token(c,token);status=effective_status(request,w.now())
+            c.execute('BEGIN IMMEDIATE');request,p,m=by_token(c,token);status=effective_status(request,w.now())
             if status in ('approved','rejected'):raise HTTPException(409,'이미 처리된 요청입니다.')
             if status=='expired':raise HTTPException(410,'링크의 유효 기간이 지났습니다. 담당자에게 다시 요청해 주세요.')
             if status!='sent':raise HTTPException(410,CLOSED)
             request.update(status=body.decision,comment=body.comment.strip(),responded_at=w.now());w.save(c,KIND,request)
+            leaders=[u['id'] for u in w.all_records(c,'person') if u['id'] in p['members'] and u.get('level')=='leader']
+            record(w,c,p,'고객 합의 회신' if body.decision=='approved' else '고객 반려 회신','external',
+                   mid=m['id'],title=m['title'],reason=body.comment.strip(),kind='mail',
+                   recipients=set(leaders+[request['requested_by']]),event_id=f"mail:{request['id']}:reply")
         return {'status':body.decision}
     return r

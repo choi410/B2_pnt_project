@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from work.v17.retrieval import registered_document, document_lines
 from work.v17.evidence_text import content_line
 from work.v3.question_scope import plan_question, in_scope, value_subject, without_project
-from work.v3.query_intent import metadata_plan, normalize, uncertain_project, unresolved_metadata, leading_aliases, label_pattern, name_key, unit_quantity, ATTRIBUTE
+from work.v3.query_intent import metadata_plan, normalize, uncertain_project, unresolved_metadata, leading_aliases, label_pattern, name_key, unit_quantity, ATTRIBUTE, strip_labels
 from work.v3.metadata_questions import answer as metadata_answer, query_scope as metadata_scope
 from work.v3.answer_meaning import validate_meaning, completion_answer
 from work.v3.topic_search import search as search_meetings
@@ -300,6 +300,9 @@ def quick_answer(w,c,projects,actor,question,explicit_scope,plan=None,*,shipment
     docs=[d for m in w.all_records(c,'meeting') if m['project_id'] in {p['id'] for p in projects}
           and (d:=registered_document(m)) and in_scope(d,plan or {})
           and (not (plan or {}).get('meeting_ids') or m['id'] in plan['meeting_ids'])]
+    from work.v3.agenda_questions import decision_request, recorded_decisions
+    if plan and (plan.get('meeting_ids') or plan.get('mode')=='meeting') and decision_request(strip_labels(question,projects)):
+        return recorded_decisions(projects,docs,plan)
     from work.v3.inbound_schedule import answer as inbound_schedule
     inbound=inbound_schedule(question,projects,docs,plan or {})
     if inbound is not None:return inbound
@@ -341,18 +344,8 @@ def quick_answer(w,c,projects,actor,question,explicit_scope,plan=None,*,shipment
     # A bounded meeting-wide status question has no attribute search term.
     # Do not discard every source simply because topic coverage is undefined.
     if plan and plan.get('operation')=='decision' and not plan.get('search_terms') and plan.get('mode')=='meeting':
-        from work.v3.answer_meaning import DECISION,NEGATIVE
-        from work.v3.topic_search import source_for
-        ps={p['id']:p for p in projects};sources=[];points=[]
-        for doc in docs:
-            hits=[l for l in document_lines(doc) if content_line(l['text']) and re.search(DECISION,l['text'])
-                  and re.search(r'합의|확정|승인|결정',l['text']) and not re.search(NEGATIVE,l['text'])]
-            if not hits:continue
-            sid='S'+str(len(sources)+1);p=ps[doc['project_id']]
-            sources.append(source_for(doc,p,sid,hits,plan))
-            points.append({'text':'합의·결정 표현이 명시된 원문입니다.\n'+'\n'.join('“'+l['text']+'”' for l in hits),
-                           'sources':[sid],'project_id':p['id'],'project_name':p['name'],'verification':'source_quote'})
-        if points:return {'kind':'documents','mode':'recorded_status','answerable':True,'points':points,'sources':sources,'message':'','notice':plan.get('notice','')}
+        decisions=recorded_decisions(projects,docs,plan)
+        if decisions['answerable']:return decisions
     result=completion_answer(w,c,projects,question,plan or {})
     if result is not None:return result
     if plan and plan.get('meeting_ids'):return None

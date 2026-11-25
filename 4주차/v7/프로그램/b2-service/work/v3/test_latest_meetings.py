@@ -94,7 +94,10 @@ def test_empty_and_unknown_dates_are_explained(client):
     c,_=client;p=project(c)
     assert not ask(c,pid=p['id'])['result']['answerable']
     missing=meeting(c,p,date='')
-    assert '최신 순서를 정할 수 없습니다' in ask(c,pid=p['id'])['result']['message']
+    undated=ask(c,pid=p['id'])['result']
+    assert '최신 순서를 정할 수 없습니다' in undated['message']
+    assert '최근 등록한 회의록 알려줘' in undated['message']
+    assert ask(c,'최근 등록한 회의록 알려줘',p['id'])['result']['sources'][0]['meeting_id']==missing['id']
     known=meeting(c,p,date='2026-11-12')
     result=ask(c,pid=p['id'])['result']
     assert [s['meeting_id'] for s in result['sources']]==[known['id']]

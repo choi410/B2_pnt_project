@@ -316,6 +316,45 @@ def test_unrelated_source_cannot_become_a_quote_for_an_unknown_property(monkeypa
     assert recover_evidence(w,'토크는 얼마야?',[source],[doc])==[]
 
 
+@pytest.mark.parametrize('wording', ['75도로 올리는 건 왜 보류했어?', '75 °C로 변경하려는 안은 왜 보류했어?'])
+def test_degree_change_reason_matches_the_same_value_and_keeps_the_causal_record(monkeypatch,wording):
+    from work.v3.content_query import bind,prepare,recover_evidence
+    from work.v3 import chat_model
+    monkeypatch.setenv('B2_CHAT_CONTENT_MODEL','1')
+    doc,source = recovery_fixture()
+    target = '시험 온도 75 ℃ 적용은 내열 시험 결과가 나오지 않아 보류했다.'
+    distractor = '시험 온도 175 ℃ 적용은 가열 장비를 확보하지 못해 보류했다.'
+    doc['body'] = '\n'.join([distractor,target])
+    content = prepare(wording,[{'name':'계측기 시제품','id':'p'}],[doc])
+    assert content['search_terms']==['75도']
+    source.update(text=doc['body'],line_ids=['L001','L002'],query_scope=bind({'mode':'current'},content))
+
+    def select(_w,request):
+        assert [row['text'] for row in request.payload['sentences']]==[target.rstrip('.')]
+        return {'support':'direct','evidence':['E1']}
+
+    monkeypatch.setattr(chat_model,'complete',select)
+    points = recover_evidence(w,wording,[source],[doc])
+    assert target in points[0]['text'] and distractor not in points[0]['text']
+    assert source['exact_highlights']==['L002']
+
+
+def test_decision_fallback_prefers_explicit_hold_and_retained_value_over_request():
+    from work.v3.answer_meaning import validate_meaning
+    scope = {'mode':'current','operation':'decision','search_terms':['검사','온도']}
+    agreed = '검사 온도는 42 ℃로 합의했다.'
+    request = '검사 온도를 45 ℃로 올려 달라고 요청했다. 추가 시험이 필요하다.'
+    outcome = '검사 온도 45 ℃ 적용은 보류했다. 기존 42 ℃를 유지한다.'
+    sources = [
+        {'id':'S1','date':'2026-08-01','project_id':'p','text':agreed,'query_scope':scope},
+        {'id':'S2','date':'2026-08-02','project_id':'p','text':request+'\n'+outcome,'query_scope':scope},
+    ]
+    answer = {'text':agreed,'sources':['S1'],'project_id':'p'}
+    points = validate_meaning([answer],sources,'검사 온도는 얼마로 합의됐어?')
+    assert points[0]['verification']=='source_quote'
+    assert outcome in points[0]['text'] and request not in points[0]['text']
+
+
 def test_decision_evidence_keeps_wrapped_outcome_and_excludes_request_only_lines(monkeypatch):
     from work.v3.content_query import recover_evidence
     from work.v3 import chat_model

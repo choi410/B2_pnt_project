@@ -105,6 +105,18 @@ def test_expand_meeting_count_keeps_date_then_exact_day_lookup(records):
     assert result(thread)['meetings'][0]['project_id']==b['id']
 
 
+@pytest.mark.parametrize('request_text', ['여기서 저장탱크는 빼줘', '그중 저장탱크 프로젝트를 빼 주세요'])
+def test_project_exclusion_keeps_meeting_period_and_order(records,request_text):
+    c,a,b,_,m=records
+    thread=send(c,'2026년 7월 회의록을 최신순으로 보여줘')
+    thread=send(c,request_text,cid=thread['id'])
+    assert [doc['date'] for doc in result(thread)['meetings']]==['2026-07-26','2026-07-05']
+    assert mids(thread)=={m['a71'],m['a72']}
+    assert state(thread)['project_ids']==[a['id']]
+    assert state(thread)['retrieval_plan']['excluded_ids']==[b['id']]
+    assert state(thread)['time_scope']['start']=='2026-07-01'
+
+
 @pytest.mark.parametrize('question', [
     '그럼 몇 번 모인 거야?',
     '그중 몇 차례나 열렸나요?',

@@ -89,10 +89,29 @@ def test_tie_clarifies_and_project_selection_keeps_detail_operation(client):
     event(meeting(c,a),'x','요청','1');event(meeting(c,b),'y','요청','2')
     t,_=send(c,'변경이력이 가장 많은 프로젝트는?')
     t,r=send(c,'그 변경 기록 보여줘',t['id'])
-    assert r['kind']=='clarification' and {p['id'] for p in r['projects']}=={a['id'],b['id']}
+    assert r['kind']=='clarification' and r['mode']=='change_project_choice'
+    assert {p['id'] for p in r['projects']}=={a['id'],b['id']}
     t=c.post('/api/conversations/questions',json={'conversation_id':t['id'],'question':'그 변경 기록 보여줘','project_id':b['id']}).json()
     r=t['messages'][-1]['result']
     assert r['mode']=='change_history' and r['result_project_ids']==[b['id']]
+
+
+def test_change_history_uses_named_previous_project_and_exposes_topic_identity(client):
+    c,_=client;a,b=seed(c)
+    with w.connect() as db:
+        rows=[e for e in w.all_records(db,'change_event') if e['project_id']==a['id']]
+        for index,e in enumerate(rows):
+            e['topic_id']='speed-verified'
+            e['title']='조정 전 속도' if index==0 else '압연 속도'
+            w.save(db,'change_event',e)
+    _,chooser=send(c,'변경이력 뭐야?')
+    assert chooser['mode']=='change_project_choice' and {p['id'] for p in chooser['projects']}=={a['id'],b['id']}
+    thread,_=send(c,'한빛셀 회의록 목록 보여줘')
+    _,history=send(c,'변경이력 뭐야?',thread['id'])
+    assert history['mode']=='change_history' and history['result_project_ids']==[a['id']]
+    assert history['direction']=='oldest'
+    assert {e['topic_id'] for e in history['change_items']}=={'speed-verified'}
+    assert {e['title'] for e in history['change_items']}=={'압연 속도','조정 전 속도'}
 
 
 def test_explicit_new_project_inventory_is_not_captured_by_history(client):

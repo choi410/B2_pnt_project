@@ -10,6 +10,7 @@ from work.v3.topic_search import search_intent
 from work.v17.evidence_text import TOPIC_REFERENCE, topic_terms
 
 MEETING_REFERENCE=re.compile(r'(?:그|이)\s*회의(?:록)?(?=\s|에서|에|의|는|은|를|을|가|도|내용|안건|[?!.]|$)')
+SAME_PROJECT=re.compile(r'^\s*(?:(?:그럼|그러면)\s+)?(?:같은|동일한)\s*프로젝트(?:에서(?:는)?|의)?(?=\s|$)\s*')
 
 def scope_question(question):
     """Questions about the search operation, not reasons stated in meetings."""
@@ -134,8 +135,10 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
     old=(previous or {}).get('context',{})
     old_result=(previous or {}).get('job',{}).get('result',{})
     result_projects,result_meetings=result_entities(previous)
-    named=policy.name_matches(available,question)
-    intent=metadata_plan(question,available)
+    same_project=SAME_PROJECT.match(question)
+    words=question[same_project.end():] if same_project else question
+    named=policy.name_matches(available,words)
+    intent=metadata_plan(words,available)
     # A validated field follow-up may contain a generic equipment word that
     # the legacy metadata parser otherwise mistakes for a project-list request.
     field_context=bool(project_id and previous and field_project(w,c,actor,question,previous)==project_id)
@@ -151,7 +154,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
     meeting_ref=bool(MEETING_REFERENCE.search(question))
     field_followup=bool(previous and re.search(ATTRIBUTE,question,re.I) and re.search(r'(?:은|는|도)\s*(?:알려줘|보여줘)?[?!.\s]*$',question))
     task_ref=bool(TOPIC_REFERENCE.search(question))
-    ref=task_ref or meeting_ref or bool(re.search(r'그럼|그러면|거기|그쪽|(?:그|이)\s*(?:설비|장비|날짜|속도|항목|내용|프로젝트|회의록|때|전|건|거|것)|이유|왜|언제|얼마|같았|유지|보류',question)) or date_only or field_followup
+    ref=bool(same_project) or task_ref or meeting_ref or bool(re.search(r'그럼|그러면|거기|그쪽|(?:그|이)\s*(?:설비|장비|날짜|속도|항목|내용|프로젝트|회의록|때|전|건|거|것)|이유|왜|언제|얼마|같았|유지|보류',question)) or date_only or field_followup
     broad_quantity=not named and not ref and not project_id and not meeting_id and unit_quantity(question)
     broad=broad or broad_quantity
     correction=bool(named and previous and re.match(r'\s*(?:아니|아니고|대신)',question))
@@ -159,6 +162,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
         named and len(policy.clean(strip_labels(question,named)))<=3 or
         project_id and any(p['id']==project_id for p in old_result.get('projects',[]))))
     ids_from_before=result_projects or old.get('project_ids',[])
+    allowed={p['id'] for p in available}
     # A user's established single-project scope survives an empty/failed
     # answer and a new topic. Result count alone must not create this scope.
     active_project=old.get('project_id') or old.get('exploration',{}).get('pinned_id')
@@ -176,11 +180,14 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
     def clarify(message,projects=(),meetings=()):
         return {**context,'clarify':message,'projects':[{'id':p['id'],'name':p['name']} for p in projects],
                 'meetings':[{'id':d['meeting_id'],'title':d['title'],'date':d.get('date','')} for d in meetings]}
+    if same_project and not project_id and not named and not keep_project and not (len(ids_from_before)==1 and ids_from_before[0] in allowed):
+        options=[p for p in available if p['id'] in ids_from_before] if previous else available
+        return clarify('어느 프로젝트를 이어서 볼까요? 프로젝트를 선택해 주세요.',options)
     if not project_id and not named and not previous and len(available)>1 and re.search(r'(?:이|그)\s*(?:설비|장비|프로젝트)',question):
         return clarify('어느 프로젝트의 설비를 말씀하시나요? 프로젝트를 선택해 주세요.',available)
     from work.v3.project_facts import owner_filter_people
     if not project_id and not named and not owner_filter_people(w,c,available,question):
-        uncertain=uncertain_project(available,question)
+        uncertain=uncertain_project(available,words)
         if uncertain is not None:
             return clarify('프로젝트 이름을 확인해 주세요. 아래 프로젝트를 말씀하신 건가요?' if uncertain else '일치하는 프로젝트를 찾지 못했습니다. 이름이나 코드를 확인해 주세요.',uncertain)
     if named and len(named)>1 and not broad and not project_id:
@@ -188,7 +195,7 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
     if previous and ref and not broad and not named and not project_id and len(ids_from_before)>1 and not meeting_ref:
         return clarify('앞 답변에 프로젝트가 여러 개 있습니다. 어느 프로젝트를 이어서 볼까요?',
                        [p for p in available if p['id'] in ids_from_before])
-    query=re.sub(r'^\s*(?:거기|그쪽)(?:의|에서|는)?\s*','',question) if ref and len(ids)==1 else question
+    query=re.sub(r'^\s*(?:거기|그쪽)(?:의|에서|는)?\s*','',words) if ref and len(ids)==1 else words
     replacement_only=not re.search(ATTRIBUTE,strip_labels(question,named),re.I)
     if correction and replacement_only or confirming:
         # Reuse the user's earlier question structure only, after removing its
@@ -207,6 +214,10 @@ def resolve(w,c,actor,question,previous=None,project_id=None,meeting_id=None,top
                    and not e.get('superseded_by_revision') and e.get('review_state')!='제외'})
     subject='' if intent else subject_in(query,titles)
     new_attribute=bool(intent or re.search(ATTRIBUTE+r'|논의\s*주제|회의\s*주제|담당|완료',query,re.I))
+    if not new_attribute:
+        from work.v3.content_query import explicit_degree_reason
+        from work.v3.inbound_schedule import request as schedule_request
+        new_attribute=explicit_degree_reason(query) or bool(schedule_request(query,selected,{}))
     if topic_relation=='new':new_attribute=True
     if not subject and not intent:
         attr=re.search(r'압연\s*속도|납품일|납기일|납기|점검\s*커버|코팅\s*폭|가압력',query)

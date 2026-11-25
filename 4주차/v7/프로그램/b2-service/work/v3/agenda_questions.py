@@ -13,6 +13,15 @@ FILLER = {'주요', '주된', '핵심', '중요', '중요한', '무슨', '뭐지
           '무엇인가요', '무엇이야', '무엇인지', '다뤘어', '다루는', '다루었던', '다뤘던'}
 DECISION_HEADING = re.compile(r'^(?:(?:주요\s*)?(?:결정|합의)\s*(?:사항|내용|결과)|회의\s*결과)\s*[:：]?$')
 OTHER_HEADING = re.compile(r'^(?:진행\s*현황|주요\s*안건|논의\s*사항|추가\s*확인\s*사항|기타)\s*[:：]?$')
+MEETING_PREFIX = re.compile(r'^(?:(?:선택한|그|이)\s*)?회의(?:록)?(?:에서(?:는)?|의)\s*')
+DECISION_REQUEST = re.compile(
+    r'(?:(?:주요|핵심)\s*)?(?:'
+    r'(?:합의|결정|확정|승인)(?:(?:한|된)\s*(?:것|게)|\s*(?:한|된)?\s*(?:내용|사항|결과))'
+    r'(?:만|은|는|이|가|을|를)?|(?:뭐(?:를|가)?|무엇을?)\s*(?:합의|결정|확정|승인)했(?:어|나요|는지))'
+    r'\s*(?:뭐(?:야|였어)|무엇인가요|(?:알려|보여|정리해)\s*(?:줘(?:요)?|주세요))?[?!.\s]*'
+)
+REVIEW_ONLY = re.compile(r'(?:검토|확인|협의|논의)\s*(?:한다|예정|하기로|할\s*예정)|(?:다음\s*회의|추후)\s*(?:에(?:서)?)?\s*(?:결정|확정|합의)')
+KEPT = re.compile(r'유지\s*(?:한다|했다|하였다|함|하기로)')
 
 
 def intent(question, projects=()):
@@ -38,7 +47,7 @@ def section_label(text):
     return re.sub(r'^\s*[#*\d.)\-·•]+\s*', '', text).strip().strip('* ')
 
 
-def decision_section(doc):
+def decision_section(doc, *, bounded=True):
     """Read the original decision section without interpreting its outcomes."""
     selected = []
     active = False
@@ -52,7 +61,47 @@ def decision_section(doc):
             selected.append(line)
     # Only fall back to a compact, complete section. Cutting at a line limit
     # could drop the end of a decision or an exception on its next line.
-    return selected if len(selected) <= 5 and sum(len(l['text']) for l in selected) <= 700 else []
+    return selected if not bounded or len(selected) <= 5 and sum(len(l['text']) for l in selected) <= 700 else []
+
+
+def decision_request(question):
+    return bool(DECISION_REQUEST.fullmatch(MEETING_PREFIX.sub('', question.strip())))
+
+
+def recorded_decisions(projects, docs, plan):
+    """Quote explicit outcomes from the whole selected meeting."""
+    from work.v3.answer_meaning import DECISION, NEGATIVE, clauses
+    from work.v3.topic_search import source_for
+
+    project_names = {p['id']: p for p in projects}
+    sources, points = [], []
+    for doc in docs:
+        section_ids = {line['id'] for line in decision_section(doc, bounded=False)}
+        hits, excerpts = [], []
+        for line in document_lines(doc):
+            if not content_line(line['text']):
+                continue
+            outcomes = []
+            for part in clauses(line['text']):
+                decided = any(not m[0].endswith('된') for m in re.finditer(DECISION, part))
+                kept = line['id'] in section_ids and KEPT.search(part)
+                if (decided or kept) and not re.search(NEGATIVE, part) and not REVIEW_ONLY.search(part):
+                    outcomes.append(part)
+            if outcomes:
+                hits.append(line)
+                excerpts.extend(outcomes)
+        if not hits:
+            continue
+        project = project_names[doc['project_id']]
+        sid = f'S{len(sources)+1}'
+        source = source_for(doc,project,sid,hits,plan)
+        source['exact_highlights'] = source['line_ids']
+        sources.append(source)
+        points.append({'text':'\n'.join(f'• {part}' for part in dict.fromkeys(excerpts)), 'sources':[sid],
+                       'project_id':project['id'], 'project_name':project['name'], 'verification':'source_quote'})
+    return {'kind':'documents','mode':'recorded_status','answerable':bool(points),'points':points,'sources':sources,
+            'answer_mode':'source_quote' if points else 'no_evidence','notice':plan.get('notice',''),
+            'message':'회의록에 기록된 합의·결정 사항이에요.' if points else '선택한 회의록에서 명시된 합의·결정 사항을 확인하지 못했어요.'}
 
 
 def lines_for(doc,summary=False):

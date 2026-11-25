@@ -116,7 +116,9 @@ def build_router(w):
  def edit_metadata(mid,body:Metadata,actor=Depends(w.user)):
   with w.connect() as c:
    c.execute('BEGIN IMMEDIATE');m=w.read(c,'meeting',mid);p=w.project(c,m['project_id'],actor);w.version(m,body.version)
-   if actor['id'] not in (m['author'],p['pm']):raise HTTPException(403,'등록자 또는 프로젝트 PM이 회의 정보를 수정할 수 있습니다.')
+   from work.v3.management import meeting_permission, protected
+   meeting_permission(w,c,p,m,actor)
+   if protected(w,c,m):raise HTTPException(409,'회의록 정정 화면에서 사유를 남겨 주세요.')
    if not body.title.strip():raise HTTPException(422,'회의 제목을 입력해 주세요.')
    before={k:m[k] for k in ('title','date')}
    w.save_content(w,m,actor,body.title,body.meeting_date,m['source'])
