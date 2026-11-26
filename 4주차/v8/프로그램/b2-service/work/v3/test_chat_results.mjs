@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {groupedChanges,groupedMeetings,matchingProjects} from './chat_results.mjs';
+const rows=Array.from({length:19},(_,i)=>({source_id:'S'+i,project_id:'p'+i%2,project_name:'이름 '+i%2,date:i<3?'2025-07-20':i<10?'2026-07-01':'2026-08-01'}));
+const groups=groupedMeetings({meetings:rows,group_by:'month'});
+assert.deepEqual(groups.map(g=>[g.key,g.items.length]),[['2026-08',9],['2026-07',7],['2025-07',3]]);
+const all=groups.flatMap(g=>g.items),pages=[all.slice(0,8),all.slice(8,16),all.slice(16)];
+assert.equal(new Set(pages.flat().map(m=>m.source_id)).size,19);
+assert.deepEqual(groupedMeetings({meetings:rows,group_by:'project'}).map(g=>g.items.length),[10,9]);
+assert.equal(groupedMeetings({meetings:rows,group_by:'month',direction:'oldest'})[0].key,'2025-07');
+assert.equal(groupedMeetings({meetings:[{date:null}],group_by:'month'})[0].label,'날짜 미정');
+
+const projects=[{id:'P-26-TEST',name:'온유소재 전극 건조기 2호기'},{id:'P-26-OTHER',name:'한빛셀 롤프레스'}];
+assert.deepEqual(matchingProjects(projects,'p26-test 건조기'),[projects[0]]);
+assert.deepEqual(matchingProjects(projects,'없는 이름'),[]);
+
+const base={project_id:'p1',project_name:'온유소재',topic_id:'speed',title:'라인 속도'};
+const old={...base,date:'2026-09-01',state:'합의',after:'80 m/min',source_id:'S1'};
+const request={...base,title:'이송 속도',date:'2026-09-11',state:'요청',after:'95 m/min',source_id:'S2'};
+const hold={...request,state:'보류',source_id:'S3'};
+const other={...hold,project_id:'p2',project_name:'한빛셀',source_id:'S4'};
+const undated={...base,date:'',state:'합의',after:'99 m/min',source_id:'S5'};
+const newest=groupedChanges({direction:'newest',change_items:[hold,request,other,old,undated]});
+const speed=newest.find(group=>group.projectName==='온유소재');
+assert.equal(newest.length,2);
+assert.deepEqual(speed.items.map(item=>item.source_id),['S3','S2','S1','S5']);
+assert.equal(speed.lastAgreement.after,'80 m/min');
+assert.equal(speed.latest.state,'보류');
+assert.equal(speed.title,'이송 속도');
+const conflicting=groupedChanges({change_items:[old,{...old,after:'81 m/min'},request]});
+assert.ok(conflicting[0].agreementConflict);
+const legacy=groupedChanges({change_items:[{...old,topic_id:null},{...hold,title:'라인속도',topic_id:null}]});
+assert.equal(legacy.length,1);
+assert.equal(legacy[0].lastAgreement.after,'80 m/min');
+console.log('Chat grouping, history states, project filtering and pagination passed');

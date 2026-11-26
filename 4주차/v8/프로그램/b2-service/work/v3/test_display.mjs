@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {cardSummary} from './change_display.js';
+const speed=cardSummary({before:'120 m/min',after:'135 m/min으로 변경 합의',business_state:'확정'});
+assert.equal(speed.before,'120');assert.equal(speed.after,'135');assert.equal(speed.unit,'m/min');assert.equal(speed.transition,true);
+const heat=cardSummary({before:'',after:'140 ℃로 합의했다. 실제 생산 운전 온도는 소재 시험 후 정한다',context:'건조로 설정 온도 상한: 소재 조건을 고려해 140 ℃로 합의했다',business_state:'확정'});
+assert.equal(heat.after,'140');assert.equal(heat.unit,'℃');assert.equal(heat.detail,'실제 생산 운전 온도는 소재 시험 후 정한다');assert.equal(heat.transition,false);
+assert.equal(cardSummary({before:'',after:'500 mm를 기본 설계 사양으로 합의했다',business_state:'확정'}).after,'500');
+const hold=cardSummary({before:'2026-12-18',after:'2026-12-23 변경 요청은 보류. 현재 납품일 2026-12-18은 유지한다.',business_state:'보류'});
+assert.equal(hold.transition,false);assert.equal(hold.after,'2026-12-23 변경 요청은 보류');assert.match(hold.detail,/2026-12-18/);
+assert.equal(cardSummary({before:'여닫이',after:'측면 슬라이드 요청 철회',business_state:'철회'}).transition,false);
+assert.equal(cardSummary({before:'여닫이',after:'측면 슬라이드로 변경 합의했다',business_state:'확정'}).after,'측면 슬라이드');
+const negative=cardSummary({before:'',after:'135 m/min으로 변경에 합의하지 않았다.',business_state:'요청'});assert.match(negative.after,/합의하지 않았다/);
+assert.equal(cardSummary({before:'',after:'진동 측정 장치 추가',business_state:'요청'}).transition,false);
+const qualified=cardSummary({before:'',after:'최대 135 m/min으로 합의했다. 원료별 재검증이 필요하다.',business_state:'확정'});assert.equal(qualified.after,'최대 135');assert.match(qualified.detail,/재검증/);
+const date=cardSummary({before:'2026-12-18',after:'2027-01-15로 합의했다. 시운전 투입일은 유틸리티 준비 후 협의한다',business_state:'확정'});assert.equal(date.after,'2027-01-15');assert.match(date.detail,/시운전/);
+console.log('10 card meaning checks passed');
