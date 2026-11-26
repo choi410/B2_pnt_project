@@ -1,0 +1,59 @@
+/* v2.1 검토 화면 시안: 회의록 등록 2단계(AI 정리 확인)만 바꿉니다. 다른 화면에는 영향이 없도록 .review-v21 아래로 한정합니다. */
+.design-v20 .review-v21 .source-scroll,.design-v20 .review-v21 .extraction-scroll{height:calc(100vh - 230px);min-height:480px;max-height:none}
+.design-v20 .review-v21 .pane-tools{display:flex;align-items:center;gap:14px}
+.design-v20 .review-v21 .pane-toggle{font-size:13px;white-space:nowrap}
+.design-v20 .review-v21 .registration-reading{padding:0 28px 28px}
+.design-v20 .review-v21 .review-tabs{position:sticky;top:0;z-index:2;background:#fff;margin:0 -28px 18px;padding:0 28px;gap:26px}
+.design-v20 .review-v21 .review-tabs button{position:relative}
+.design-v20 .review-v21 .tab-warn{display:inline-block;width:7px;height:7px;border-radius:50%;background:#c2452d;margin-left:6px;vertical-align:middle}
+.design-v20 .review-v21 .review-alert{display:flex;align-items:center;gap:8px;width:100%;margin:0 0 18px;padding:11px 14px;border:1px solid #f0cfc6;border-radius:8px;background:#fdf1ee;color:#a43a25;font-size:13px;text-align:left;line-height:1.5}
+.design-v20 .review-v21 button.review-alert{cursor:pointer}
+.design-v20 .review-v21 button.review-alert:hover{background:#fbe6e0}
+.design-v20 .review-v21 .review-alert span{margin-left:auto;font-size:12px;color:#8a5a4f}
+.design-v20 .review-v21 .review-alert svg{flex:none}
+.design-v20 .review-v21 .reading-section+.reading-section{margin-top:28px}
+.design-v20 .review-v21 .review-task{padding:16px 0}
+.design-v20 .review-v21 .review-task-main{display:flex;align-items:flex-start;gap:10px}
+.design-v20 .review-v21 .review-task-main .kind-label{flex:none;margin-top:5px;font-size:11px}
+.design-v20 .review-v21 .review-task-main p{margin:0;font-weight:600;color:#26374d}
+.design-v20 .review-v21 .review-task-meta{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
+.design-v20 .review-v21 .meta-chip{font-size:12px;line-height:1.5;padding:2px 10px;border-radius:999px;background:#eef2f7;color:#44546a}
+.design-v20 .review-v21 .meta-chip.empty{background:#fdf1ee;color:#a43a25;font-weight:700;box-shadow:inset 0 0 0 1px #f0cfc6}
+.design-v20 .review-v21 .review-change{padding:16px 0;border-top:1px solid #e3e9f0}
+.design-v20 .review-v21 .review-change-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.design-v20 .review-v21 .review-change-head b{font-size:14px;color:#26374d}
+.design-v20 .review-v21 .change-cat{font-size:12px;color:#69768a}
+.design-v20 .review-v21 .state-chip{margin-left:auto;font-size:12px;font-weight:700;padding:1px 9px;border-radius:999px;background:#eef2f7;color:#44546a}
+.design-v20 .review-v21 .state-chip.st-확정{background:#e3f3ea;color:#23704f}
+.design-v20 .review-v21 .state-chip.st-요청{background:#e8f0fc;color:#225ba3}
+.design-v20 .review-v21 .state-chip.st-보류{background:#fbf0d2;color:#8a6200}
+.design-v20 .review-v21 .state-chip.st-철회{background:#eceff2;color:#66717d}
+.design-v20 .review-v21 .review-change p{margin:6px 0 4px;font-size:14px;line-height:1.7;color:#3f5979}
+.design-v20 .review-v21 .review-change del{color:#8b97a6}
+.design-v20 .review-v21 .review-change strong{color:#26374d}
+.design-v20 .review-v21 .mark-legend{display:flex;gap:16px;padding:8px 18px;border-bottom:1px solid #e9edf2;font-size:12px;color:#5f6e83}
+.design-v20 .review-v21 .mark-legend span{display:inline-flex;align-items:center;gap:6px}
+.design-v20 .review-v21 .mark-legend i{width:14px;height:10px;border-radius:2px}
+.design-v20 .review-v21 .mark-legend i.req,.evidence-mark.req{background:#ffe38f}
+.design-v20 .review-v21 .mark-legend i.task,.evidence-mark.task{background:#bfe9cc}
+.evidence-mark{position:absolute;pointer-events:none;mix-blend-mode:multiply;border-radius:2px;opacity:.75}
+.source-lines>.mark-req:not(.selected){background:#fff8de;box-shadow:inset 3px 0 0 #e3bd3a}
+.source-lines>.mark-task:not(.selected){background:#eefaf2;box-shadow:inset 3px 0 0 #6fc08a}
+@media(min-width:1001px){
+ .design-v20 .review-v21{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+ .design-v20 .review-v21.ai-wide{grid-template-columns:1fr}
+ .design-v20 .review-v21.ai-wide .source-pane{display:none}
+ .design-v20 .review-v21.ai-wide .registration-reading>*{max-width:880px;margin-left:auto;margin-right:auto}
+ .design-v20 .review-v21.ai-wide .review-tabs{max-width:none;margin:0 -28px 18px}
+}
+@media(max-width:1000px){.design-v20 .review-v21 .pane-toggle{display:none}.design-v20 .review-v21 .source-scroll{height:360px;min-height:0}.design-v20 .review-v21 .extraction-scroll{height:auto;min-height:0;max-height:none}}
+.design-v20 .review-v21 .overall-summary{margin-bottom:28px}
+.design-v20 .review-v21 .overall-summary p{margin:10px 0 8px;padding:16px 18px;border-radius:10px;background:#f4f7fb;font-size:15px;line-height:1.9;color:#26374d}
+.design-v20 .review-v21 .overall-summary small{font-size:12px;color:#69768a}
+/* 패치 2: 전체 요약 입력, 간단 모드 */
+.design-v20 .review-v21 .overall-summary textarea{display:block;width:100%;margin:10px 0 8px;padding:14px 16px;border:1px solid #d6dee8;border-radius:10px;background:#f7f9fc;font-size:15px;line-height:1.8;color:#26374d;resize:vertical;min-height:168px}
+.design-v20 .review-v21 .overall-summary textarea:focus{background:#fff;border-color:#225ba3;outline:none}
+.design-v20 .meeting-ai .overall-read p{margin:8px 0 22px;padding:14px 16px;border-radius:10px;background:#f4f7fb;font-size:15px;line-height:1.8;color:#26374d}
+.design-v20.simple-mode .overview-aside section:has(.overview-shortcuts){display:none}
+.design-v20.simple-mode .notification-btn{display:none}
+.design-v20 .simple-toggle[aria-pressed="true"]{color:inherit}

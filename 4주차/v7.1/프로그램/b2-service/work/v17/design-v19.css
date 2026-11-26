@@ -1,0 +1,193 @@
+/* design-v19.css — 공통 UI 스킨 v1.9.1. theme.css, design-v18*.css 뒤에 합쳐 적용.
+   적용 범위: root가 붙이는 .workspace.design-v19 아래 전체(사이드바·헤더·본문 공통 요소)와, 그 밖에 렌더되는 모달·토스트(body:has(.workspace.design-v19)).
+   참고 방향(다우오피스형 업무 서비스): 네이비 아이콘 레일 + 흰 콘텐츠, 선명한 메뉴 선택, 가는 테두리, 제목·도구막대·목록의 분명한 위계.
+   원칙: 기능·DOM·데이터 무변경. 색만이 아니라 간격·크기·위계를 정돈. 새 카드·배지·영어 장식 없음. PNT 로고 유지(네이비 배경용 흰색 반전). 8px 간격 체계. */
+
+.workspace.design-v19{
+ --w-bg:#f3f5f8;--w-side:#f3f5f8;--w-side-line:#e2e7ee;--w-line:#e3e8ef;--w-line-2:#cfd8e3;--w-hover:#f4f7fb;--w-head-bg:#f8fafc;
+ --w-ink:#1f3047;--w-ink-2:#4a5d73;--w-ink-3:#6c7e91;--w-faint:#8f9db0;
+ --w-navy:#132f52;--w-blue:#174a8b;--w-blue-soft:#e9f0fa;--w-green:#4f7a2a;
+ --w-radius:6px;--w-side-w:88px;--w-side-w-compact:64px;--w-top-h:60px;
+ background:var(--w-bg);color:var(--w-ink);font-size:14px;line-height:1.6;
+}
+
+/* Sidebar restored to the agreed compact navy rail. */
+.workspace.design-v19 .rail{width:var(--w-side-w);background:var(--navy);border-right:0;color:#bbcadb;align-items:center}
+.workspace.design-v19 .main-shell{margin-left:var(--w-side-w);width:calc(100% - var(--w-side-w));background:var(--w-bg)}
+.workspace.design-v19 .rail-brand{height:var(--w-top-h);justify-content:center;padding:0;border-bottom:1px solid #ffffff18;width:100%}
+.workspace.design-v19 .rail-brand img{width:54px;filter:brightness(0) invert(1);opacity:1}
+.workspace.design-v19 .rail nav{gap:9px;padding:27px 0 0;align-items:center}
+.workspace.design-v19 .rail nav button{flex-direction:column;justify-content:center;gap:5px;width:66px;height:68px;padding:0;border-radius:8px;color:#b3c3d5;font-size:11px;font-weight:500;line-height:1.4}
+.workspace.design-v19 .rail nav button svg{width:22px;height:22px;flex:none;color:inherit}
+.workspace.design-v19 .rail nav button span{display:inline;white-space:nowrap}
+.workspace.design-v19 .rail nav button:hover{background:#ffffff12;color:#fff}
+.workspace.design-v19 .rail nav button.active{background:#ffffff14;color:#fff;font-weight:700;box-shadow:none}
+.workspace.design-v19 .rail nav button.active:before{left:-11px;top:17px;bottom:17px;width:3px;border-radius:0 2px 2px 0;background:#b2cb46}
+.workspace.design-v19 .rail nav button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.workspace.design-v19 .nav-dot{right:12px;top:8px;background:#b2cb46}
+.workspace.design-v19 .rail-bottom{padding:12px 0 16px;flex-direction:column;gap:8px;border-top:0}
+.workspace.design-v19 .rail-bottom .icon-btn{color:#bbcadb}
+.workspace.design-v19 .rail-bottom .icon-btn:hover{background:#ffffff12;color:#fff}
+.workspace.design-v19 .version{font-size:10px;letter-spacing:0;color:#a6b9cf}
+
+/* 접힘(아이콘만) */
+.workspace.design-v19.compact-nav .rail{width:var(--w-side-w-compact)}
+.workspace.design-v19.compact-nav .main-shell{margin-left:var(--w-side-w-compact);width:calc(100% - var(--w-side-w-compact))}
+.workspace.design-v19.compact-nav .rail-brand{justify-content:center;padding:0}
+.workspace.design-v19.compact-nav .rail-brand img{width:36px}
+.workspace.design-v19.compact-nav .rail nav{padding:12px 8px 0}
+.workspace.design-v19.compact-nav .rail nav button{width:100%;justify-content:center;padding:0}
+.workspace.design-v19.compact-nav .rail nav button span{display:none}
+.workspace.design-v19.compact-nav .rail nav button.active:before{left:-8px}
+.workspace.design-v19.compact-nav .rail-bottom{flex-direction:column;gap:8px}
+
+/* ═════════ 상단 헤더: 낮고 가늘게 ═════════ */
+.workspace.design-v19 .topbar{height:var(--w-top-h);padding:0 28px;gap:16px;border-bottom:1px solid var(--w-line);background:#fff}
+.workspace.design-v19 .context,.workspace.design-v19 .top-tools{gap:12px}
+.workspace.design-v19 .project-switch{height:36px;padding:0 12px 0 10px;border:1px solid var(--w-line-2);border-radius:var(--w-radius);background:#fff;font-size:14px;font-weight:600;color:var(--w-ink)}
+.workspace.design-v19 .project-switch:hover{background:var(--w-hover)}
+.workspace.design-v19 .project-switch svg{color:var(--w-ink-3)}
+.workspace.design-v19 .global-search{height:36px;padding:0 14px;min-width:260px;border:1px solid var(--w-line-2);border-radius:var(--w-radius);background:#fff;font-size:13.5px;color:var(--w-ink-3)}
+.workspace.design-v19 .global-search:hover{border-color:#b7c5d6}
+.workspace.design-v19 .notification-btn{width:36px;height:36px;border:1px solid transparent;border-radius:var(--w-radius)}
+.workspace.design-v19 .notification-btn:hover{background:var(--w-hover)}
+.workspace.design-v19 .notification-btn i{background:var(--w-green)}
+.workspace.design-v19 .profile-btn{height:36px;padding-left:14px;border-left:1px solid var(--w-line);font-size:13.5px;color:var(--w-ink)}
+.workspace.design-v19 .profile-btn small{color:var(--w-ink-3);font-weight:400}
+.workspace.design-v19 .avatar{background:var(--w-blue-soft);color:var(--w-blue);font-size:11px}
+
+/* ═════════ 본문 공통 ═════════ */
+.workspace.design-v19 .content{max-width:1440px;padding:28px 36px 64px}
+.workspace.design-v19 .page-head{align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--w-line)}
+.workspace.design-v19 .page-head h1{font-size:22px;font-weight:700;letter-spacing:-.2px;color:var(--w-ink);line-height:1.3}
+.workspace.design-v19 .page-head p{margin-top:6px;font-size:13.5px;color:var(--w-ink-3)}
+.workspace.design-v19 .eyebrow{font-size:12.5px;font-weight:600;letter-spacing:0;color:var(--w-ink-3);margin-bottom:6px}
+.workspace.design-v19 .head-actions{gap:8px;padding-top:2px}
+.workspace.design-v19 .section-title{margin-bottom:12px}
+.workspace.design-v19 .section-title h2{font-size:16px;font-weight:700;color:var(--w-ink)}
+.workspace.design-v19 .section-title h3{font-size:14px;font-weight:700;color:var(--w-ink)}
+.workspace.design-v19 .section-title p{font-size:13px;color:var(--w-ink-3)}
+.workspace.design-v19 .muted{font-size:13px;color:var(--w-ink-3)}
+.workspace.design-v19 .field-note{font-size:12.5px;color:var(--w-ink-3);line-height:1.6;margin-top:6px}
+.workspace.design-v19 .notice,.workspace.design-v19 .warning{padding:10px 14px;border-radius:var(--w-radius);font-size:13px;line-height:1.65;margin:12px 0}
+.workspace.design-v19 .warning{background:#fbf3e3;color:#6a5218;border:1px solid #efdfb6}
+.workspace.design-v19 .notice{background:var(--w-head-bg);color:var(--w-ink-2);border:1px solid var(--w-line)}
+.workspace.design-v19 .text-link{font-size:13px;font-weight:600;color:var(--w-blue)}
+.workspace.design-v19 .back-link{font-size:13px;color:var(--w-ink-3);margin-bottom:16px}
+.workspace.design-v19 .back-link:hover{color:var(--w-blue)}
+
+/* 도구막대: 탭 + 검색 + 액션을 한 줄, 아래 가는 선 */
+.workspace.design-v19 .tabs{gap:20px;border-bottom:1px solid var(--w-line)}
+.workspace.design-v19 .tabs button{padding:10px 2px 11px;font-size:13.5px;font-weight:500;color:var(--w-ink-3)}
+.workspace.design-v19 .tabs button:hover{color:var(--w-ink)}
+.workspace.design-v19 .tabs button.active{color:var(--w-navy);border-bottom:2px solid var(--w-navy);font-weight:700}
+.workspace.design-v19 .tabs button em{font-style:normal;font-size:12px;font-weight:600;color:var(--w-faint);margin-left:2px}
+.workspace.design-v19 .tabs button.active em{color:var(--w-navy)}
+.workspace.design-v19 .home-list-tools,.workspace.design-v19 .work-tools{gap:12px}
+.workspace.design-v19 .home-list-tools{margin:14px 0 12px}
+.workspace.design-v19 .segmented{padding:2px;border-radius:var(--w-radius);background:var(--w-head-bg);border-color:var(--w-line)}
+.workspace.design-v19 .segmented button{font-size:13px;padding:6px 12px;border-radius:4px}
+.workspace.design-v19 .segmented button.active{color:var(--w-navy);box-shadow:0 1px 2px #13305214}
+
+/* 버튼·입력: 36px 높이, 6px 모서리, 가는 테두리 */
+.workspace.design-v19 .btn{min-height:36px;padding:0 14px;border-radius:var(--w-radius);border-color:var(--w-line-2);font-size:13.5px;font-weight:600;color:var(--w-ink)}
+.workspace.design-v19 .btn:hover:not(:disabled){background:var(--w-hover);border-color:#b7c5d6}
+.workspace.design-v19 .btn.primary{background:var(--w-navy);border-color:var(--w-navy);color:#fff;box-shadow:none}
+.workspace.design-v19 .btn.primary:hover:not(:disabled){background:#1b3f6f;border-color:#1b3f6f}
+.workspace.design-v19 .btn.small{min-height:30px;padding:0 10px;font-size:12.5px}
+.workspace.design-v19 .btn.danger{color:#a8433a;border-color:#e6c4bf}
+.workspace.design-v19 .btn:disabled{opacity:.5}
+.workspace.design-v19 .icon-btn{width:36px;height:36px;border-radius:var(--w-radius)}
+.workspace.design-v19 .icon-btn:hover{background:var(--w-hover)}
+.workspace.design-v19 input,.workspace.design-v19 textarea,.workspace.design-v19 select{border:1px solid var(--w-line-2);border-radius:var(--w-radius);padding:8px 12px;font-size:14px;line-height:1.5;color:var(--w-ink);background:#fff}
+.workspace.design-v19 input:focus,.workspace.design-v19 textarea:focus,.workspace.design-v19 select:focus{outline:2px solid #2d6fc2;outline-offset:-1px;border-color:#2d6fc2}
+.workspace.design-v19 .search{height:36px;padding:0 10px;border-radius:var(--w-radius);border-color:var(--w-line-2);color:var(--w-ink-3)}
+.workspace.design-v19 .search input{font-size:13.5px}
+.workspace.design-v19 .person-select{min-height:36px;border-radius:var(--w-radius);border-color:var(--w-line-2)}
+.workspace.design-v19 .edit-grid{gap:16px;margin:16px 0}
+.workspace.design-v19 .edit-grid label,.workspace.design-v19 .field{font-size:13px;color:var(--w-ink-2);font-weight:600}
+.workspace.design-v19 .edit-grid label textarea,.workspace.design-v19 .edit-grid label input,.workspace.design-v19 .edit-grid label select{margin-top:6px;font-weight:400}
+.workspace.design-v19 .check-line{font-size:13.5px;color:var(--w-ink-2)}
+
+/* 목록(표형): 머리글은 작고 연하게, 행은 60px, 제목 14px */
+.workspace.design-v19 .task-table{border:1px solid var(--w-line);border-radius:var(--w-radius)}
+.workspace.design-v19 .table-head{padding-top:9px;padding-bottom:9px;font-size:12.5px;font-weight:600;color:var(--w-ink-3);background:var(--w-head-bg);border-bottom:1px solid var(--w-line)}
+.workspace.design-v19 .task-row{min-height:60px;padding:12px 16px;font-size:13.5px;border-bottom:1px solid var(--w-line)}
+.workspace.design-v19 .task-row:last-child{border-bottom:0}
+.workspace.design-v19 .task-row:hover{background:var(--w-hover)}
+.workspace.design-v19 .task-main b{font-size:14px;font-weight:600;color:var(--w-ink);line-height:1.45}
+.workspace.design-v19 .task-main small{font-size:12.5px;color:var(--w-ink-3)}
+.workspace.design-v19 .task-table.condensed .task-row{min-height:52px;padding:10px 14px}
+.workspace.design-v19 .task-row>svg{color:var(--w-faint)}
+.workspace.design-v19 .overdue{color:#a8433a}
+.workspace.design-v19 .column-sort{font-weight:600}
+.workspace.design-v19 .column-sort.sorted{color:var(--w-navy)}
+.workspace.design-v19 .recent-meetings button{padding:12px 14px;border-bottom:1px solid var(--w-line);font-size:13.5px}
+.workspace.design-v19 .recent-meetings button:hover{background:var(--w-hover)}
+.workspace.design-v19 .recent-meetings b{font-size:14px;font-weight:600;color:var(--w-ink)}
+.workspace.design-v19 .recent-meetings small{font-size:12.5px;color:var(--w-ink-3)}
+.workspace.design-v19 .status{font-size:12px;padding:2px 8px;border-radius:4px}
+.workspace.design-v19 .status i{width:6px;height:6px}
+.workspace.design-v19 .person span{font-size:13px}
+.workspace.design-v19 .empty{padding:40px 20px;color:var(--w-ink-3)}
+.workspace.design-v19 .empty h3{font-size:15px;font-weight:600;color:var(--w-ink-2)}
+.workspace.design-v19 .empty p{font-size:13.5px}
+.workspace.design-v19 .load-more{margin-top:12px;text-align:center}
+
+/* 홈 v1.8.2(story_view)와 변경 이력은 이미 흰 배경·구분선 체계라 위계만 맞춤 */
+.workspace.design-v19 .story-view .sv-title-row h1{font-size:22px}
+.workspace.design-v19 .story-view .sv-head{margin-bottom:28px}
+.workspace.design-v19 .change-flow-page .page-head{border-bottom:0;padding-bottom:0;margin-bottom:16px}
+.workspace.design-v19 .flow-topics{border-radius:var(--w-radius)}
+.workspace.design-v19 .flow-topic-item>b{font-size:14px}
+.workspace.design-v19 .flow-topic-item>small,.workspace.design-v19 .flow-topic-item>span{font-size:12.5px}
+
+/* 회의록·등록 화면 공통 요소 */
+.workspace.design-v19 .registration-steps{border-radius:var(--w-radius)}
+.workspace.design-v19 .registration-steps li{font-size:13px}
+.workspace.design-v19 .candidate-editor{border-radius:var(--w-radius);border-color:var(--w-line)}
+.workspace.design-v19 .candidate-actions{border-radius:var(--w-radius);background:var(--w-head-bg);border:1px solid var(--w-line);padding:12px 16px}
+.workspace.design-v19 .proposal-meetings,.workspace.design-v19 .dash-list,.workspace.design-v19 .dash-table{border-radius:var(--w-radius)}
+.workspace.design-v19 .source-pane,.workspace.design-v19 .extraction-pane{border-color:var(--w-line);border-radius:var(--w-radius)}
+.workspace.design-v19 .pane-title{font-size:13.5px;font-weight:700;color:var(--w-ink-2)}
+
+/* ═════════ 모달·토스트 (workspace 밖에 렌더됨) ═════════ */
+body:has(.workspace.design-v19) .modal{border:1px solid var(--w-line-2,#cfd8e3);border-radius:8px;box-shadow:0 12px 40px #13305226}
+body:has(.workspace.design-v19) .modal-inner{border-radius:8px}
+body:has(.workspace.design-v19) .modal header{padding:16px 20px;border-bottom:1px solid #e3e8ef}
+body:has(.workspace.design-v19) .modal header h2{font-size:16px;font-weight:700;color:#1f3047}
+body:has(.workspace.design-v19) .modal-body{padding:20px;font-size:14px;color:#1f3047}
+body:has(.workspace.design-v19) .modal footer{padding:12px 20px;border-top:1px solid #e3e8ef;background:#f8fafc;display:flex;justify-content:flex-end;gap:8px}
+body:has(.workspace.design-v19) .modal .btn{min-height:36px;border-radius:6px;font-size:13.5px}
+body:has(.workspace.design-v19) .modal .btn.primary{background:#132f52;border-color:#132f52}
+body:has(.workspace.design-v19) .modal input,body:has(.workspace.design-v19) .modal textarea,body:has(.workspace.design-v19) .modal select{border-radius:6px;font-size:14px;padding:8px 12px}
+body:has(.workspace.design-v19) .modal .edit-grid label{font-size:13px;font-weight:600;color:#4a5d73}
+body:has(.workspace.design-v19) .toast{border-radius:6px;background:#132f52;font-size:13.5px}
+
+/* ═════════ 반응형 ═════════ */
+@media(max-width:1100px){
+ .workspace.design-v19 .content{padding:24px 28px 56px}
+ .workspace.design-v19 .global-search{min-width:200px}
+}
+@media(max-width:900px){
+ .workspace.design-v19 .rail{width:var(--w-side-w-compact)}
+ .workspace.design-v19 .main-shell{margin-left:var(--w-side-w-compact);width:calc(100% - var(--w-side-w-compact))}
+ .workspace.design-v19 .rail-brand{justify-content:center;padding:0}
+ .workspace.design-v19 .rail-brand img{width:36px}
+ .workspace.design-v19 .rail nav{padding:12px 8px 0}
+ .workspace.design-v19 .rail nav button{width:48px;height:52px;justify-content:center;padding:0}
+ .workspace.design-v19 .rail nav button span{display:none}
+ .workspace.design-v19 .rail nav button.active:before{left:-8px}
+ .workspace.design-v19 .rail-bottom{flex-direction:column;gap:8px}
+ .workspace.design-v19 .global-search span{display:none}
+ .workspace.design-v19 .global-search{min-width:0;padding:0 10px}
+}
+@media(max-width:760px){
+ .workspace.design-v19 .topbar{height:56px;padding:0 16px}
+ .workspace.design-v19 .rail-brand{height:56px}
+ .workspace.design-v19 .content{padding:20px 16px 48px}
+ .workspace.design-v19 .page-head{flex-direction:column;align-items:stretch;gap:12px}
+ .workspace.design-v19 .page-head h1{font-size:20px}
+ .workspace.design-v19 .profile-btn>span:not(.avatar){display:none}
+ .workspace.design-v19 .profile-btn{border-left:0;padding-left:0}
+}
